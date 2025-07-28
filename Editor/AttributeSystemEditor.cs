@@ -7,130 +7,106 @@ namespace StatForge.Editor
     [CustomEditor(typeof(AttributeSystem))]
     public class AttributeSystemEditor : UnityEditor.Editor
     {
-        private AttributeSystem attributeSystem;
-
-        private void OnEnable()
-        {
-            attributeSystem = (AttributeSystem)target;
-        }
-
         public override void OnInspectorGUI()
         {
+            var system = (AttributeSystem)target;
+            
             DrawDefaultInspector();
-
+            
             if (!Application.isPlaying)
             {
-                EditorGUILayout.Space(10);
-                EditorGUILayout.HelpBox("Runtime features are only available during play mode.", MessageType.Info);
+                EditorGUILayout.Space();
+                EditorGUILayout.HelpBox("Runtime features available only in play mode", MessageType.Info);
                 return;
             }
-
-            EditorGUILayout.Space(15);
-            EditorGUILayout.LabelField("Runtime Controls", EditorStyles.boldLabel);
-
+            
+            EditorGUILayout.Space();
+            DrawRuntimeControls(system);
+            DrawStats(system);
+        }
+        
+        private void DrawRuntimeControls(AttributeSystem system)
+        {
+            EditorGUILayout.LabelField("Runtime", EditorStyles.boldLabel);
+            
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Available Points:", GUILayout.Width(120));
-            EditorGUILayout.LabelField(attributeSystem.AvailablePoints.ToString(), EditorStyles.boldLabel);
-            GUILayout.FlexibleSpace();
-
-            if (GUILayout.Button("Add 5", GUILayout.Width(60)))
-                attributeSystem.AddAvailablePoints(5);
-            if (GUILayout.Button("Add 10", GUILayout.Width(60)))
-                attributeSystem.AddAvailablePoints(10);
-            if (GUILayout.Button("Reset All", GUILayout.Width(70)))
-                if (EditorUtility.DisplayDialog("Reset Points", "Reset all allocated points?", "Yes", "No"))
-                    attributeSystem.ResetAllocatedPoints();
+            EditorGUILayout.LabelField($"Available Points: {system.AvailablePoints}", EditorStyles.boldLabel);
+            
+            if (GUILayout.Button("+5", GUILayout.Width(30)))
+                system.AddAvailablePoints(5);
+            if (GUILayout.Button("Reset", GUILayout.Width(50)))
+                system.ResetAllocatedPoints();
             EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.Space(15);
-
-            var primaryStats = attributeSystem.GetPrimaryStats();
+            
+            EditorGUILayout.Space();
+        }
+        
+        private void DrawStats(AttributeSystem system)
+        {
+            var primaryStats = system.GetPrimaryStats();
             if (primaryStats.Count > 0)
             {
                 EditorGUILayout.LabelField("Primary Stats", EditorStyles.boldLabel);
-                EditorGUILayout.Space(5);
-
-                foreach (var stat in primaryStats) DrawStatRow(stat, true);
-
-                EditorGUILayout.Space(10);
+                foreach (var stat in primaryStats)
+                    DrawStat(system, stat, true);
+                EditorGUILayout.Space();
             }
-
-            var derivedStats = attributeSystem.GetDerivedStats();
+            
+            var derivedStats = system.GetDerivedStats();
             if (derivedStats.Count > 0)
             {
                 EditorGUILayout.LabelField("Derived Stats", EditorStyles.boldLabel);
-                EditorGUILayout.Space(5);
-
-                foreach (var stat in derivedStats) DrawStatRow(stat, false);
-
-                EditorGUILayout.Space(10);
+                foreach (var stat in derivedStats)
+                    DrawStat(system, stat, false);
+                EditorGUILayout.Space();
             }
-
-            var externalStats = attributeSystem.GetExternalStats();
+            
+            var externalStats = system.GetExternalStats();
             if (externalStats.Count > 0)
             {
                 EditorGUILayout.LabelField("External Stats", EditorStyles.boldLabel);
-                EditorGUILayout.Space(5);
-
-                foreach (var stat in externalStats) DrawStatRow(stat, false);
+                foreach (var stat in externalStats)
+                    DrawStat(system, stat, false);
             }
-
-            if (GUI.changed)
-                EditorUtility.SetDirty(target);
         }
-
-        private void DrawStatRow(StatValue stat, bool allowAllocation)
+        
+        private void DrawStat(AttributeSystem system, StatValue stat, bool canAllocate)
         {
-            if (stat.statType == null) return;
-
-            EditorGUILayout.BeginVertical("box");
-
-            EditorGUILayout.BeginHorizontal();
-
-            EditorGUILayout.LabelField(stat.statType.DisplayName, EditorStyles.boldLabel, GUILayout.Width(120));
-
-            var currentValue = attributeSystem.GetStatValue(stat.statType);
-            EditorGUILayout.LabelField($"{currentValue:F1}", EditorStyles.boldLabel, GUILayout.Width(40));
-
-            var details = $"(Base: {stat.baseValue:F1}";
-            if (stat.allocatedPoints > 0)
-                details += $" + Alloc: {stat.allocatedPoints:F1}";
-            if (stat.bonusValue != 0)
-                details += $" + Bonus: {stat.bonusValue:F1}";
-            var tempBonus = attributeSystem.GetTemporaryBonus(stat.statType);
-            if (tempBonus != 0)
-                details += $" + Temp: {tempBonus:F1}";
+            if (stat?.statType == null) return;
+            
+            EditorGUILayout.BeginHorizontal("box");
+            
+            // Name and value
+            var value = system.GetStatValue(stat.statType);
+            EditorGUILayout.LabelField(stat.statType.DisplayName, GUILayout.Width(100));
+            EditorGUILayout.LabelField($"{value:F1}", EditorStyles.boldLabel, GUILayout.Width(40));
+            
+            // Details
+            var details = $"(B:{stat.baseValue:F0}";
+            if (stat.allocatedPoints > 0) details += $" A:{stat.allocatedPoints:F0}";
+            if (stat.bonusValue != 0) details += $" Bo:{stat.bonusValue:F0}";
+            var temp = system.GetTemporaryBonus(stat.statType);
+            if (temp != 0) details += $" T:{temp:F0}";
             details += ")";
-
+            
             EditorGUILayout.LabelField(details, EditorStyles.miniLabel);
-
             GUILayout.FlexibleSpace();
-
-            if (allowAllocation)
+            
+            // Controls
+            if (canAllocate)
             {
-                GUI.enabled = attributeSystem.CanAllocatePoint(stat.statType);
+                GUI.enabled = system.CanAllocatePoint(stat.statType);
                 if (GUILayout.Button("+", GUILayout.Width(25)))
-                    attributeSystem.AllocatePoint(stat.statType);
-
-                GUI.enabled = attributeSystem.CanDeallocatePoint(stat.statType);
+                    system.AllocatePoint(stat.statType);
+                
+                GUI.enabled = system.CanDeallocatePoint(stat.statType);
                 if (GUILayout.Button("-", GUILayout.Width(25)))
-                    attributeSystem.DeallocatePoint(stat.statType);
-
+                    system.DeallocatePoint(stat.statType);
+                
                 GUI.enabled = true;
             }
-
+            
             EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Temp Bonus:", GUILayout.Width(80));
-            var newTempBonus = EditorGUILayout.FloatField(tempBonus, GUILayout.Width(50));
-            if (!Mathf.Approximately(newTempBonus, tempBonus))
-                attributeSystem.SetTemporaryBonus(stat.statType, newTempBonus);
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.EndVertical();
-            EditorGUILayout.Space(3);
         }
     }
 }
