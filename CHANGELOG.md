@@ -1,3 +1,10 @@
+# [0.2.0](https://github.com/Natteens/statforge/compare/v0.1.0...v0.2.0) (2025-07-28)
+
+
+### Features
+
+* Add StatForge attribute system and editor tools ([c323ae6](https://github.com/Natteens/statforge/commit/c323ae613b034a32c9f2dd72e49bde9bdfe01ded))
+
 # 📝 Changelog
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
