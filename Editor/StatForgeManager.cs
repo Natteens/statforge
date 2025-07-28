@@ -524,27 +524,47 @@ namespace StatForge.Editor
             {
                 GUILayout.Space(20);
                 GUILayout.Label("Create from Template", EditorStyles.boldLabel);
+                GUILayout.Space(10);
 
-                foreach (var template in allTemplates)
+                try
                 {
-                    if (template == null) continue;
-
-                    EditorGUILayout.BeginHorizontal("box");
-
-                    EditorGUILayout.BeginVertical();
-                    GUILayout.Label(template.templateName ?? "Unnamed Template", EditorStyles.boldLabel);
-                    GUILayout.Label($"{template.statTypes?.Count ?? 0} stats", EditorStyles.miniLabel);
-                    EditorGUILayout.EndVertical();
-
-                    GUILayout.FlexibleSpace();
-
-                    if (GUILayout.Button("Use", GUILayout.Width(50)))
+                    foreach (var template in allTemplates)
                     {
-                        CreateContainerFromTemplate(template);
-                        return;
-                    }
+                        if (template == null) continue;
 
-                    EditorGUILayout.EndHorizontal();
+                        EditorGUILayout.BeginVertical("box");
+
+                        EditorGUILayout.BeginHorizontal();
+
+                        EditorGUILayout.BeginVertical();
+                        GUILayout.Label(template.templateName ?? "Unnamed Template", EditorStyles.boldLabel);
+                        GUILayout.Label($"{template.statTypes?.Count ?? 0} stats", EditorStyles.miniLabel);
+                        EditorGUILayout.EndVertical();
+
+                        GUILayout.FlexibleSpace();
+
+                        if (GUILayout.Button("Use", GUILayout.Width(50)))
+                            try
+                            {
+                                CreateContainerFromTemplate(template);
+                                EditorGUILayout.EndHorizontal();
+                                EditorGUILayout.EndVertical();
+                                return;
+                            }
+                            catch (Exception e)
+                            {
+                                Debug.LogError($"Error using template: {e.Message}");
+                            }
+
+                        EditorGUILayout.EndHorizontal();
+                        EditorGUILayout.EndVertical();
+
+                        GUILayout.Space(5);
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Error drawing templates: {e.Message}");
                 }
             }
         }
