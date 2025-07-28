@@ -728,124 +728,146 @@ namespace StatForge.Editor
         }
         
         private void DrawContainerEditor()
+{
+    if (selectedContainer == null) return;
+    
+    DrawFormField("Container Name", () => {
+        var containerName = EditorGUILayout.TextField(selectedContainer.ContainerName ?? "");
+        if (containerName != selectedContainer.ContainerName)
         {
-            if (selectedContainer == null) return;
+            selectedContainer.ContainerName = containerName;
+            EditorUtility.SetDirty(selectedContainer);
+        }
+    });
+    
+    DrawFormField("Category", () => {
+        var category = (ContainerCategory)EditorGUILayout.EnumPopup(selectedContainer.Category);
+        if (category != selectedContainer.Category)
+        {
+            selectedContainer.Category = category;
+            EditorUtility.SetDirty(selectedContainer);
+        }
+    });
+    
+    DrawFormField("Description", () => {
+        var newDesc = EditorGUILayout.TextArea(selectedContainer.Description ?? "", GUILayout.Height(40));
+        if (newDesc != selectedContainer.Description)
+        {
+            selectedContainer.Description = newDesc;
+            EditorUtility.SetDirty(selectedContainer);
+        }
+    });
+    
+    GUILayout.Space(20);
+    
+    GUILayout.Label("Stats in Container", EditorStyles.boldLabel);
+    GUILayout.Space(10);
+    
+    // Garantir que o container está inicializado
+    if (selectedContainer.Stats == null)
+    {
+        selectedContainer.Initialize();
+        EditorUtility.SetDirty(selectedContainer);
+    }
+    
+    EditorGUILayout.BeginHorizontal();
+    GUILayout.Label("Add Stat:", GUILayout.Width(70));
+    
+    if (allStats != null && allStats.Count > 0 && selectedContainer.Stats != null)
+    {
+        var availableStats = allStats.Where(s => s != null && !selectedContainer.HasStat(s)).ToArray();
+        
+        if (availableStats.Length > 0)
+        {
+            var statNames = availableStats.Select(s => s.DisplayName ?? "Unnamed Stat").ToArray();
+            var selectedIndex = EditorGUILayout.Popup(0, statNames);
+            if (GUILayout.Button("Add", GUILayout.Width(50)))
+            {
+                selectedContainer.AddStat(availableStats[selectedIndex]);
+                EditorUtility.SetDirty(selectedContainer);
+            }
+        }
+        else
+        {
+            GUILayout.Label("All stats already added", EditorStyles.miniLabel);
+        }
+    }
+    else
+    {
+        if (allStats == null || allStats.Count == 0)
+        {
+            GUILayout.Label("No stat types available", EditorStyles.miniLabel);
+        }
+        else
+        {
+            GUILayout.Label("Container not initialized", EditorStyles.miniLabel);
+        }
+    }
+    
+    EditorGUILayout.EndHorizontal();
+    
+    GUILayout.Space(15);
+    
+    if (selectedContainer.Stats != null && selectedContainer.Stats.Count > 0)
+    {
+        var statsToRemove = new List<StatValue>();
+        
+        foreach (var stat in selectedContainer.Stats)
+        {
+            if (stat?.statType == null) 
+            {
+                statsToRemove.Add(stat);
+                continue;
+            }
             
-            DrawFormField("Container Name", () => {
-                var containerName = EditorGUILayout.TextField(selectedContainer.ContainerName ?? "");
-                if (containerName != selectedContainer.ContainerName)
-                {
-                    selectedContainer.ContainerName = containerName;
-                    EditorUtility.SetDirty(selectedContainer);
-                }
-            });
-            
-            DrawFormField("Category", () => {
-                var category = (ContainerCategory)EditorGUILayout.EnumPopup(selectedContainer.Category);
-                if (category != selectedContainer.Category)
-                {
-                    selectedContainer.Category = category;
-                    EditorUtility.SetDirty(selectedContainer);
-                }
-            });
-            
-            DrawFormField("Description", () => {
-                var newDesc = EditorGUILayout.TextArea(selectedContainer.Description ?? "", GUILayout.Height(40));
-                if (newDesc != selectedContainer.Description)
-                {
-                    selectedContainer.Description = newDesc;
-                    EditorUtility.SetDirty(selectedContainer);
-                }
-            });
-            
-            GUILayout.Space(20);
-            
-            GUILayout.Label("Stats in Container", EditorStyles.boldLabel);
-            GUILayout.Space(10);
+            EditorGUILayout.BeginVertical("box");
             
             EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("Add Stat:", GUILayout.Width(70));
             
-            if (allStats != null && selectedContainer.Stats != null)
+            EditorGUILayout.BeginVertical();
+            GUILayout.Label(stat.statType.DisplayName ?? "Unnamed Stat", EditorStyles.boldLabel);
+            GUILayout.Label($"Base: {stat.baseValue:F1}", EditorStyles.miniLabel);
+            EditorGUILayout.EndVertical();
+            
+            GUILayout.FlexibleSpace();
+            
+            GUILayout.Label("Base:", GUILayout.Width(35));
+            var newBase = EditorGUILayout.FloatField(stat.baseValue, GUILayout.Width(60));
+            if (!Mathf.Approximately(newBase, stat.baseValue))
             {
-                var availableStats = allStats.Where(s => s != null && !selectedContainer.HasStat(s)).ToArray();
-                var statNames = availableStats.Select(s => s.DisplayName ?? "Unnamed Stat").ToArray();
-                
-                if (availableStats.Length > 0)
-                {
-                    var selectedIndex = EditorGUILayout.Popup(0, statNames);
-                    if (GUILayout.Button("Add", GUILayout.Width(50)))
-                    {
-                        selectedContainer.AddStat(availableStats[selectedIndex]);
-                        EditorUtility.SetDirty(selectedContainer);
-                    }
-                }
-                else
-                {
-                    GUILayout.Label("All stats already added", EditorStyles.miniLabel);
-                }
+                stat.SetBaseValue(newBase);
+                EditorUtility.SetDirty(selectedContainer);
+            }
+            
+            GUILayout.Space(10);
+            
+            if (GUILayout.Button("×", GUILayout.Width(20), GUILayout.Height(20)))
+            {
+                statsToRemove.Add(stat);
             }
             
             EditorGUILayout.EndHorizontal();
-            
-            GUILayout.Space(15);
-            
-            if (selectedContainer.Stats != null)
-            {
-                var statsToRemove = new List<StatValue>();
-                
-                foreach (var stat in selectedContainer.Stats)
-                {
-                    if (stat?.statType == null) 
-                    {
-                        statsToRemove.Add(stat);
-                        continue;
-                    }
-                    
-                    EditorGUILayout.BeginVertical("box");
-                    
-                    EditorGUILayout.BeginHorizontal();
-                    
-                    EditorGUILayout.BeginVertical();
-                    GUILayout.Label(stat.statType.DisplayName ?? "Unnamed Stat", EditorStyles.boldLabel);
-                    GUILayout.Label($"Base: {stat.baseValue:F1}", EditorStyles.miniLabel);
-                    EditorGUILayout.EndVertical();
-                    
-                    GUILayout.FlexibleSpace();
-                    
-                    GUILayout.Label("Base:", GUILayout.Width(35));
-                    var newBase = EditorGUILayout.FloatField(stat.baseValue, GUILayout.Width(60));
-                    if (!Mathf.Approximately(newBase, stat.baseValue))
-                    {
-                        stat.SetBaseValue(newBase);
-                        EditorUtility.SetDirty(selectedContainer);
-                    }
-                    
-                    GUILayout.Space(10);
-                    
-                    if (GUILayout.Button("×", GUILayout.Width(20), GUILayout.Height(20)))
-                    {
-                        statsToRemove.Add(stat);
-                    }
-                    
-                    EditorGUILayout.EndHorizontal();
-                    EditorGUILayout.EndVertical();
-                }
-                
-                foreach (var statToRemove in statsToRemove)
-                {
-                    if (statToRemove?.statType != null)
-                    {
-                        selectedContainer.RemoveStat(statToRemove.statType);
-                    }
-                    else
-                    {
-                        selectedContainer.Stats.Remove(statToRemove);
-                    }
-                    EditorUtility.SetDirty(selectedContainer);
-                }
-            }
+            EditorGUILayout.EndVertical();
         }
+        
+        foreach (var statToRemove in statsToRemove)
+        {
+            if (statToRemove?.statType != null)
+            {
+                selectedContainer.RemoveStat(statToRemove.statType);
+            }
+            else
+            {
+                selectedContainer.Stats.Remove(statToRemove);
+            }
+            EditorUtility.SetDirty(selectedContainer);
+        }
+    }
+    else
+    {
+        GUILayout.Label("No stats in container", EditorStyles.centeredGreyMiniLabel);
+    }
+}
         
         private void DrawTemplateEditor()
         {
@@ -1449,16 +1471,22 @@ namespace StatForge.Editor
         
         private void CreateContainerFromTemplate(ContainerTemplate template)
         {
-            if (template == null) return;
-            
+            if (template == null) 
+            {
+                Debug.LogError("Template is null");
+                return;
+            }
+    
             try
             {
                 var asset = CreateInstance<StatContainer>();
-                asset.ContainerName = $"{template.templateName ?? "Template"} Container";
+                asset.ContainerName = string.IsNullOrEmpty(template.templateName) ? "Template Container" : $"{template.templateName} Container";
                 asset.Category = newContainerCategory;
-                asset.Description = newDescription;
-                
-                if (template.statTypes != null)
+                asset.Description = string.IsNullOrEmpty(newDescription) ? template.description : newDescription;
+        
+                asset.Initialize();
+        
+                if (template.statTypes != null && template.statTypes.Count > 0)
                 {
                     foreach (var statType in template.statTypes)
                     {
@@ -1468,20 +1496,23 @@ namespace StatForge.Editor
                         }
                     }
                 }
-                
+        
                 EnsureDirectoryExists(containersPath);
-                var path = AssetDatabase.GenerateUniqueAssetPath($"{containersPath}/{asset.ContainerName.Replace(" ", "")}.asset");
+                var safeName = asset.ContainerName.Replace(" ", "").Replace("/", "").Replace("\\", "");
+                var path = AssetDatabase.GenerateUniqueAssetPath($"{containersPath}/{safeName}.asset");
                 AssetDatabase.CreateAsset(asset, path);
                 AssetDatabase.SaveAssets();
-                
+        
                 RefreshData();
                 selectedContainer = asset;
                 isCreatingNew = false;
                 currentView = ViewMode.Containers;
+        
+                Debug.Log($"Container '{asset.ContainerName}' created from template '{template.templateName}'");
             }
             catch (Exception e)
             {
-                Debug.LogError($"Create Container from Template Error: {e.Message}");
+                Debug.LogError($"Create Container from Template Error: {e.Message}\nStack: {e.StackTrace}");
             }
         }
         
