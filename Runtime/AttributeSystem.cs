@@ -13,7 +13,7 @@ namespace StatForge
         [SerializeField] private int availablePoints;
         
         private StatContainer runtimeContainer;
-        private Dictionary<StatType, float> temporaryBonuses;
+        private Dictionary<StatType, float> temporaryBonuses = new Dictionary<StatType, float>();
         
         public StatContainer RuntimeContainer => runtimeContainer;
         public int AvailablePoints => availablePoints;
@@ -29,6 +29,10 @@ namespace StatForge
             
             runtimeContainer = StatContainer.Merge(baseContainers.ToArray());
             runtimeContainer.Initialize();
+            
+            // Ensure temporaryBonuses is initialized
+            if (temporaryBonuses == null)
+                temporaryBonuses = new Dictionary<StatType, float>();
         }
         
         public void SetAvailablePoints(int points)
@@ -46,6 +50,10 @@ namespace StatForge
             if (runtimeContainer == null) return 0f;
             
             float baseValue = runtimeContainer.GetStatValue(statType);
+            
+            // Ensure temporaryBonuses is initialized
+            if (temporaryBonuses == null)
+                temporaryBonuses = new Dictionary<StatType, float>();
             
             if (temporaryBonuses.TryGetValue(statType, out float bonus))
                 baseValue += bonus;
@@ -100,6 +108,9 @@ namespace StatForge
         
         public void AddTemporaryBonus(StatType statType, float bonus)
         {
+            if (temporaryBonuses == null)
+                temporaryBonuses = new Dictionary<StatType, float>();
+                
             if (temporaryBonuses.ContainsKey(statType))
                 temporaryBonuses[statType] += bonus;
             else
@@ -108,6 +119,9 @@ namespace StatForge
         
         public void RemoveTemporaryBonus(StatType statType, float bonus)
         {
+            if (temporaryBonuses == null)
+                temporaryBonuses = new Dictionary<StatType, float>();
+                
             if (temporaryBonuses.ContainsKey(statType))
             {
                 temporaryBonuses[statType] -= bonus;
@@ -118,11 +132,17 @@ namespace StatForge
         
         public void ClearTemporaryBonuses()
         {
-            temporaryBonuses.Clear();
+            if (temporaryBonuses == null)
+                temporaryBonuses = new Dictionary<StatType, float>();
+            else
+                temporaryBonuses.Clear();
         }
         
         public void SetTemporaryBonus(StatType statType, float bonus)
         {
+            if (temporaryBonuses == null)
+                temporaryBonuses = new Dictionary<StatType, float>();
+                
             if (Mathf.Approximately(bonus, 0f))
                 temporaryBonuses.Remove(statType);
             else
@@ -131,6 +151,9 @@ namespace StatForge
         
         public float GetTemporaryBonus(StatType statType)
         {
+            if (temporaryBonuses == null)
+                temporaryBonuses = new Dictionary<StatType, float>();
+                
             return temporaryBonuses.TryGetValue(statType, out float bonus) ? bonus : 0f;
         }
         

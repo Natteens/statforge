@@ -246,14 +246,30 @@ namespace StatForge.Editor
                 if (availableStats.Length > 0)
                 {
                     EditorGUILayout.BeginHorizontal();
-                    var names = availableStats.Select(s => s.DisplayName).ToArray();
-                    var index = EditorGUILayout.Popup("Add Stat", 0, names);
-                    if (GUILayout.Button("Add", GUILayout.Width(50)))
+                    GUILayout.Label("Add Stat:", GUILayout.Width(60));
+                    
+                    var names = new string[availableStats.Length + 1];
+                    names[0] = "Select Stat...";
+                    for (int i = 0; i < availableStats.Length; i++)
                     {
-                        selectedContainer.AddStat(availableStats[index]);
+                        names[i + 1] = availableStats[i].DisplayName;
+                    }
+                    
+                    var selectedIndex = EditorGUILayout.Popup(0, names);
+                    
+                    GUI.enabled = selectedIndex > 0;
+                    if (GUILayout.Button("Add", GUILayout.Width(50)) && selectedIndex > 0)
+                    {
+                        selectedContainer.AddStat(availableStats[selectedIndex - 1]);
                         EditorUtility.SetDirty(selectedContainer);
                     }
+                    GUI.enabled = true;
+                    
                     EditorGUILayout.EndHorizontal();
+                }
+                else
+                {
+                    EditorGUILayout.LabelField("All available stats already added", EditorStyles.miniLabel);
                 }
             }
             

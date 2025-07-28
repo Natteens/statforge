@@ -77,7 +77,17 @@ namespace StatForge.Editor
             EditorGUILayout.BeginHorizontal("box");
             
             // Name and value
-            var value = system.GetStatValue(stat.statType);
+            float value = 0f;
+            try
+            {
+                value = system.GetStatValue(stat.statType);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"Error getting stat value for {stat.statType.DisplayName}: {e.Message}");
+                value = stat.TotalValue; // Fallback to direct value
+            }
+            
             EditorGUILayout.LabelField(stat.statType.DisplayName, GUILayout.Width(100));
             EditorGUILayout.LabelField($"{value:F1}", EditorStyles.boldLabel, GUILayout.Width(40));
             
@@ -85,7 +95,14 @@ namespace StatForge.Editor
             var details = $"(B:{stat.baseValue:F0}";
             if (stat.allocatedPoints > 0) details += $" A:{stat.allocatedPoints:F0}";
             if (stat.bonusValue != 0) details += $" Bo:{stat.bonusValue:F0}";
-            var temp = system.GetTemporaryBonus(stat.statType);
+            
+            float temp = 0f;
+            try
+            {
+                temp = system.GetTemporaryBonus(stat.statType);
+            }
+            catch { /* ignore */ }
+            
             if (temp != 0) details += $" T:{temp:F0}";
             details += ")";
             
