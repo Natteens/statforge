@@ -1,3 +1,10 @@
+## [0.2.1](https://github.com/Natteens/statforge/compare/v0.2.0...v0.2.1) (2025-07-28)
+
+
+### Bug Fixes
+
+* Refactor StatForgeManager UI and add settings panel ([e76d7ca](https://github.com/Natteens/statforge/commit/e76d7cab58f0474f9915b37cbade036053c38283))
+
 # [0.2.0](https://github.com/Natteens/statforge/compare/v0.1.0...v0.2.0) (2025-07-28)
 
 
