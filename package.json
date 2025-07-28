@@ -1,6 +1,6 @@
 {
   "name": "com.natteens.statforge",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "displayName": "StatForge",
   "description": "Sistema modular de definição e manipulação de atributos (stats), com suporte a atributos derivados, modificadores e integração com qualquer tipo de entidade ou item.",
   "keywords": [

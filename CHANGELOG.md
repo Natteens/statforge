@@ -1,3 +1,10 @@
+## [0.2.2](https://github.com/Natteens/statforge/compare/v0.2.1...v0.2.2) (2025-07-28)
+
+
+### Bug Fixes
+
+* Refactor container editor and improve template creation ([620fcea](https://github.com/Natteens/statforge/commit/620fcea14c41a920b677eeddd2f7b85673f6d2f2))
+
 ## [0.2.1](https://github.com/Natteens/statforge/compare/v0.2.0...v0.2.1) (2025-07-28)
 
 
