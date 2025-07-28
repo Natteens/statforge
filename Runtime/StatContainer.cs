@@ -44,7 +44,12 @@ namespace StatForge
             set => category = value; 
         }
         
-        public List<StatValue> Stats => stats;
+        public List<StatValue> Stats
+        {
+            get => stats;
+            set => stats = value;
+        }
+
         public bool IsInitialized => isInitialized;
         
         public void Initialize()
