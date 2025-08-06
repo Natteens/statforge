@@ -10,14 +10,16 @@
 
 ## ✨ Principais Características
 
-- 🎯 **Sistema de Categorias**: Primary, Derived e External stats
-- 📊 **Fórmulas Dinâmicas**: Calcule stats derivados usando fórmulas customizáveis
-- 🔧 **Editor Visual**: Interface completa para criação e gerenciamento
-- 📦 **Containers Modulares**: Organize stats por categoria (Base, Entity, Class, Item, Skill)
-- 🎛️ **Sistema de Pontos**: Alocação e desalocação dinâmica de pontos
-- ⚡ **Performance Otimizada**: Cache inteligente e recálculo eficiente
-- 🔄 **Modificadores Temporários**: Buffs, debuffs e efeitos temporários
-- 📋 **Templates**: Crie e reutilize configurações de stats
+- 🎯 **API Ultra-Simplificada**: Apenas `[Stat]` e funciona!
+- 📊 **Sintaxe Natural**: `Health -= Time.deltaTime;` funciona como esperado
+- 🔧 **Editor Visual Moderno**: Interface limpa sem elementos desnecessários
+- 📦 **Sistema Modular**: Use com ou sem MonoBehaviour
+- 🎛️ **Query System Fluente**: `stats.Where().Sum()` para consultas complexas
+- ⚡ **Performance Otimizada**: Cache inteligente e zero allocations
+- 🔄 **Modificadores Temporários**: Buffs e debuffs com duração automática
+- 📋 **Compatibilidade Total**: Funciona com sistema tradicional
+- 🎯 **Auto-Discovery**: Detecta automaticamente campos marcados com `[Stat]`
+- 🔧 **Thread-Safe**: Coleções seguras para uso em múltiplas threads
 
 ## 📥 Instalação
 
@@ -83,40 +85,78 @@ Componente Unity que controla todo o sistema:
 
 ## 🚀 Guia de Uso Rápido
 
-### 1. Criando Seus Primeiros Stats
+### 1. API Ultra-Simplificada (Recomendado)
 
-1. Abra o **StatForge Manager**: `Tools > StatForge > Manager`
-2. Na aba **Stat Types**, clique em **+** para criar um novo stat
-3. Configure as propriedades básicas:
+Agora você pode usar o StatForge com apenas uma linha! Adicione `[Stat]` aos seus campos:
 
 ```csharp
-// Exemplo de configuração
-Display Name: "Força"
-Short Name: "STR"
-Category: Primary
-Default Value: 10
-Min Value: 1
-Max Value: 100
+using StatForge;
+
+public class Player : MonoBehaviour
+{
+    [Stat] public int Strength = 10;
+    [Stat] public float Health = 100f;
+    [Stat] public int Level = 1;
+    
+    void Update()
+    {
+        Health -= Time.deltaTime;  // Sintaxe natural!
+        if (Input.GetKeyDown(KeyCode.Space)) Level++;
+    }
+}
 ```
 
-### 2. Criando Stats Derivados
+### 2. Configuração Avançada com Atributos
 
-Para stats que dependem de outros (como HP baseado em Constituição):
+Para mais controle, use parâmetros no atributo `[Stat]`:
 
 ```csharp
-Display Name: "Health Points"
-Short Name: "HP"
-Category: Derived
-Formula: "CON * 10 + 50"
+public class AdvancedPlayer : MonoBehaviour
+{
+    [Stat(DisplayName = "Força", ShortName = "STR", MinValue = 1, MaxValue = 100)]
+    public int Strength = 10;
+    
+    [Stat(DisplayName = "Vida Máxima", Formula = "STR * 10 + Level * 5", Category = StatCategory.Derived)]
+    public float MaxHealth = 0f; // Auto-calculado
+    
+    [Stat] public float Health = 100f;
+    [Stat] public int Level = 1;
+}
 ```
 
-### 3. Configurando um Container
+### 3. Usando o Componente StatForge
 
-1. Na aba **Containers**, crie um novo container
-2. Adicione os stats desejados
-3. Configure os valores base para cada stat
+O componente `StatForgeComponent` é adicionado automaticamente e oferece funcionalidades extras:
 
-### 4. Usando no Código
+```csharp
+public class PlayerController : MonoBehaviour
+{
+    private StatForgeComponent statForge;
+    
+    void Start()
+    {
+        statForge = GetComponent<StatForgeComponent>();
+        
+        // Adicionar buff temporário
+        statForge.AddModifier<int>("Strength", 5, 10f); // +5 por 10 segundos
+        
+        // Escutar mudanças
+        statForge.OnAttributeChanged("Health", (oldVal, newVal) => 
+        {
+            Debug.Log($"Health changed: {oldVal} → {newVal}");
+        });
+        
+        // Query system fluente
+        var totalCombatPower = statForge.Query()
+            .Where(name => name.Contains("Strength") || name.Contains("Attack"))
+            .Sum<int>();
+    }
+}
+```
+
+### 4. Método Tradicional (Compatibilidade)
+
+O sistema tradicional continua funcionando para projetos existentes:
 
 ```csharp
 using StatForge;
