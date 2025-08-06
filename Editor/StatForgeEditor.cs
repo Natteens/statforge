@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -9,11 +10,12 @@ namespace StatForge.Editor
 {
     public class StatForgeEditor : EditorWindow
     {
-        private enum ViewMode { StatTypes, Containers }
+        private enum ViewMode { StatTypes, Containers, StatCollections }
         
         private ViewMode currentView = ViewMode.StatTypes;
         private List<StatType> allStats;
         private List<StatContainer> allContainers;
+        private List<GameObject> statObjects; // Objects with StatCollections
         private Vector2 leftScrollPos;
         private Vector2 rightScrollPos;
         private string searchFilter = "";
@@ -21,79 +23,174 @@ namespace StatForge.Editor
         // Selection
         private StatType selectedStat;
         private StatContainer selectedContainer;
+        private GameObject selectedStatObject;
+        
+        // Styles
+        private GUIStyle headerStyle;
+        private GUIStyle cardStyle;
+        private GUIStyle selectedCardStyle;
+        private bool stylesInitialized;
         
         [MenuItem("Tools/StatForge/Editor")]
         public static void ShowWindow()
         {
             var window = GetWindow<StatForgeEditor>("StatForge");
-            window.minSize = new Vector2(800f, 500f);
+            window.minSize = new Vector2(900f, 600f);
             window.Show();
         }
         
         private void OnEnable()
         {
             RefreshData();
+            InitializeStyles();
+        }
+        
+        private void InitializeStyles()
+        {
+            if (stylesInitialized) return;
+            
+            headerStyle = new GUIStyle(EditorStyles.largeLabel)
+            {
+                fontSize = 16,
+                fontStyle = FontStyle.Bold,
+                margin = new RectOffset(5, 5, 5, 5)
+            };
+            
+            cardStyle = new GUIStyle("box")
+            {
+                padding = new RectOffset(8, 8, 8, 8),
+                margin = new RectOffset(2, 2, 2, 2)
+            };
+            
+            selectedCardStyle = new GUIStyle("selectionRect")
+            {
+                padding = new RectOffset(8, 8, 8, 8),
+                margin = new RectOffset(2, 2, 2, 2)
+            };
+            
+            stylesInitialized = true;
         }
         
         private void OnGUI()
         {
-            DrawToolbar();
+            InitializeStyles();
+            DrawModernToolbar();
             
-            var rect = new Rect(0, 30, position.width, position.height - 30);
-            var leftRect = new Rect(rect.x, rect.y, 250, rect.height);
-            var rightRect = new Rect(leftRect.xMax + 5, rect.y, rect.width - leftRect.width - 5, rect.height);
+            var rect = new Rect(0, 35, position.width, position.height - 35);
+            var leftRect = new Rect(rect.x + 5, rect.y, 280, rect.height - 10);
+            var rightRect = new Rect(leftRect.xMax + 10, rect.y, rect.width - leftRect.width - 20, rect.height - 10);
             
-            DrawLeftPanel(leftRect);
-            DrawRightPanel(rightRect);
+            DrawModernLeftPanel(leftRect);
+            DrawModernRightPanel(rightRect);
         }
         
-        private void DrawToolbar()
+        private void DrawModernToolbar()
         {
-            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar, GUILayout.Height(30));
             
-            if (GUILayout.Toggle(currentView == ViewMode.StatTypes, "Stats", EditorStyles.toolbarButton))
-                currentView = ViewMode.StatTypes;
-            if (GUILayout.Toggle(currentView == ViewMode.Containers, "Containers", EditorStyles.toolbarButton))
-                currentView = ViewMode.Containers;
+            // View mode buttons with modern styling
+            var tabStyle = new GUIStyle(EditorStyles.toolbarButton) { fixedHeight = 25 };
+            
+            if (GUILayout.Toggle(currentView == ViewMode.StatTypes, "Stat Types", tabStyle, GUILayout.Width(80)))
+            {
+                if (currentView != ViewMode.StatTypes)
+                {
+                    currentView = ViewMode.StatTypes;
+                    ClearSelection();
+                }
+            }
+            if (GUILayout.Toggle(currentView == ViewMode.Containers, "Containers", tabStyle, GUILayout.Width(80)))
+            {
+                if (currentView != ViewMode.Containers)
+                {
+                    currentView = ViewMode.Containers;
+                    ClearSelection();
+                }
+            }
+            if (GUILayout.Toggle(currentView == ViewMode.StatCollections, "Live Stats", tabStyle, GUILayout.Width(80)))
+            {
+                if (currentView != ViewMode.StatCollections)
+                {
+                    currentView = ViewMode.StatCollections;
+                    ClearSelection();
+                    RefreshStatObjects();
+                }
+            }
             
             GUILayout.Space(20);
-            searchFilter = GUILayout.TextField(searchFilter, EditorStyles.toolbarTextField, GUILayout.Width(150));
+            
+            // Search field with icon
+            GUILayout.Label("Search:", GUILayout.Width(45));
+            searchFilter = GUILayout.TextField(searchFilter, EditorStyles.toolbarTextField, GUILayout.Width(200));
             
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Refresh", EditorStyles.toolbarButton))
+            
+            // Action buttons
+            if (GUILayout.Button("Refresh", EditorStyles.toolbarButton, GUILayout.Width(60)))
                 RefreshData();
+            
+            if (GUILayout.Button("New", EditorStyles.toolbarButton, GUILayout.Width(40)))
+                CreateNew();
             
             EditorGUILayout.EndHorizontal();
         }
         
-        private void DrawLeftPanel(Rect rect)
+        private void ClearSelection()
+        {
+            selectedStat = null;
+            selectedContainer = null;
+            selectedStatObject = null;
+        }
+        
+        private void DrawModernLeftPanel(Rect rect)
         {
             GUILayout.BeginArea(rect, EditorStyles.helpBox);
             
-            // Header
+            // Modern header
             EditorGUILayout.BeginHorizontal();
-            var title = currentView == ViewMode.StatTypes ? "Stat Types" : "Containers";
-            GUILayout.Label(title, EditorStyles.boldLabel);
+            var title = GetCurrentViewTitle();
+            GUILayout.Label(title, headerStyle);
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("+", GUILayout.Width(25)))
+            
+            var createButtonStyle = new GUIStyle(GUI.skin.button) { fixedWidth = 30, fixedHeight = 25 };
+            if (GUILayout.Button("+", createButtonStyle))
                 CreateNew();
             EditorGUILayout.EndHorizontal();
             
             GUILayout.Space(5);
             
-            // List
+            // Content list with modern cards
             leftScrollPos = GUILayout.BeginScrollView(leftScrollPos);
             
-            if (currentView == ViewMode.StatTypes)
-                DrawStatTypesList();
-            else
-                DrawContainersList();
+            switch (currentView)
+            {
+                case ViewMode.StatTypes:
+                    DrawModernStatTypesList();
+                    break;
+                case ViewMode.Containers:
+                    DrawModernContainersList();
+                    break;
+                case ViewMode.StatCollections:
+                    DrawModernStatObjectsList();
+                    break;
+            }
             
             GUILayout.EndScrollView();
             GUILayout.EndArea();
         }
         
-        private void DrawStatTypesList()
+        private string GetCurrentViewTitle()
+        {
+            return currentView switch
+            {
+                ViewMode.StatTypes => "Stat Types",
+                ViewMode.Containers => "Containers", 
+                ViewMode.StatCollections => "Live Objects",
+                _ => "Items"
+            };
+        }
+        
+        private void DrawModernStatTypesList()
         {
             if (allStats == null) return;
             
@@ -103,12 +200,39 @@ namespace StatForge.Editor
             foreach (var stat in filtered)
             {
                 var isSelected = selectedStat == stat;
-                var style = isSelected ? "selectionRect" : "box";
+                var style = isSelected ? selectedCardStyle : cardStyle;
                 
                 EditorGUILayout.BeginVertical(style);
                 
+                // Title and category in same line
+                EditorGUILayout.BeginHorizontal();
                 GUILayout.Label(stat.DisplayName, EditorStyles.boldLabel);
-                GUILayout.Label($"({stat.ShortName}) - {stat.Category}", EditorStyles.miniLabel);
+                GUILayout.FlexibleSpace();
+                
+                // Category badge
+                var categoryColor = GetCategoryColor(stat.Category);
+                var oldColor = GUI.backgroundColor;
+                GUI.backgroundColor = categoryColor;
+                GUILayout.Label(stat.Category.ToString(), EditorStyles.miniButton, GUILayout.Width(60));
+                GUI.backgroundColor = oldColor;
+                
+                EditorGUILayout.EndHorizontal();
+                
+                // Short name and default value
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label($"({stat.ShortName})", EditorStyles.miniLabel);
+                GUILayout.FlexibleSpace();
+                if (stat.Category != StatCategory.Derived)
+                {
+                    GUILayout.Label($"Default: {stat.DefaultValue:F1}", EditorStyles.miniLabel);
+                }
+                EditorGUILayout.EndHorizontal();
+                
+                // Formula for derived stats
+                if (stat.Category == StatCategory.Derived && !string.IsNullOrEmpty(stat.Formula))
+                {
+                    GUILayout.Label($"Formula: {stat.Formula}", EditorStyles.miniLabel);
+                }
                 
                 EditorGUILayout.EndVertical();
                 
@@ -117,13 +241,25 @@ namespace StatForge.Editor
                 {
                     selectedStat = stat;
                     selectedContainer = null;
+                    selectedStatObject = null;
                     Repaint();
                     Event.current.Use();
                 }
             }
         }
         
-        private void DrawContainersList()
+        private Color GetCategoryColor(StatCategory category)
+        {
+            return category switch
+            {
+                StatCategory.Primary => new Color(0.4f, 0.8f, 0.4f),
+                StatCategory.Derived => new Color(0.4f, 0.6f, 0.9f),
+                StatCategory.External => new Color(0.9f, 0.7f, 0.4f),
+                _ => Color.gray
+            };
+        }
+        
+        private void DrawModernContainersList()
         {
             if (allContainers == null) return;
             
@@ -133,12 +269,31 @@ namespace StatForge.Editor
             foreach (var container in filtered)
             {
                 var isSelected = selectedContainer == container;
-                var style = isSelected ? "selectionRect" : "box";
+                var style = isSelected ? selectedCardStyle : cardStyle;
                 
                 EditorGUILayout.BeginVertical(style);
                 
+                // Title and category
+                EditorGUILayout.BeginHorizontal();
                 GUILayout.Label(container.ContainerName, EditorStyles.boldLabel);
-                GUILayout.Label($"{container.Stats?.Count ?? 0} stats - {container.Category}", EditorStyles.miniLabel);
+                GUILayout.FlexibleSpace();
+                
+                var categoryColor = GetContainerCategoryColor(container.Category);
+                var oldColor = GUI.backgroundColor;
+                GUI.backgroundColor = categoryColor;
+                GUILayout.Label(container.Category.ToString(), EditorStyles.miniButton, GUILayout.Width(60));
+                GUI.backgroundColor = oldColor;
+                
+                EditorGUILayout.EndHorizontal();
+                
+                // Stats count and description
+                GUILayout.Label($"{container.Stats?.Count ?? 0} stats", EditorStyles.miniLabel);
+                if (!string.IsNullOrEmpty(container.Description))
+                {
+                    GUILayout.Label(container.Description.Length > 50 
+                        ? container.Description.Substring(0, 50) + "..." 
+                        : container.Description, EditorStyles.miniLabel);
+                }
                 
                 EditorGUILayout.EndVertical();
                 
@@ -147,22 +302,89 @@ namespace StatForge.Editor
                 {
                     selectedContainer = container;
                     selectedStat = null;
+                    selectedStatObject = null;
                     Repaint();
                     Event.current.Use();
                 }
             }
         }
         
-        private void DrawRightPanel(Rect rect)
+        private Color GetContainerCategoryColor(ContainerCategory category)
+        {
+            return category switch
+            {
+                ContainerCategory.Base => new Color(0.6f, 0.8f, 0.6f),
+                ContainerCategory.Equipment => new Color(0.8f, 0.6f, 0.8f),
+                ContainerCategory.Temporary => new Color(0.8f, 0.8f, 0.6f),
+                _ => Color.gray
+            };
+        }
+        
+        private void DrawModernStatObjectsList()
+        {
+            if (statObjects == null) 
+            {
+                GUILayout.Label("No objects with stats found in scene", EditorStyles.centeredGreyMiniLabel);
+                return;
+            }
+            
+            var filtered = statObjects.Where(obj => obj != null && 
+                (string.IsNullOrEmpty(searchFilter) || obj.name.ToLower().Contains(searchFilter.ToLower()))).ToList();
+            
+            foreach (var obj in filtered)
+            {
+                var isSelected = selectedStatObject == obj;
+                var style = isSelected ? selectedCardStyle : cardStyle;
+                
+                EditorGUILayout.BeginVertical(style);
+                
+                // Object name and active status
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label(obj.name, EditorStyles.boldLabel);
+                GUILayout.FlexibleSpace();
+                
+                var statusColor = obj.activeInHierarchy ? Color.green : Color.gray;
+                var oldColor = GUI.color;
+                GUI.color = statusColor;
+                GUILayout.Label(obj.activeInHierarchy ? "Active" : "Inactive", EditorStyles.miniButton, GUILayout.Width(50));
+                GUI.color = oldColor;
+                
+                EditorGUILayout.EndHorizontal();
+                
+                // Stats info
+                var collection = obj.GetStatCollection();
+                if (collection != null)
+                {
+                    GUILayout.Label($"{collection.Stats.Count} stats active", EditorStyles.miniLabel);
+                }
+                
+                EditorGUILayout.EndVertical();
+                
+                if (Event.current.type == EventType.MouseDown && 
+                    GUILayoutUtility.GetLastRect().Contains(Event.current.mousePosition))
+                {
+                    selectedStatObject = obj;
+                    selectedStat = null;
+                    selectedContainer = null;
+                    Selection.activeGameObject = obj; // Highlight in hierarchy
+                    Repaint();
+                    Event.current.Use();
+                }
+            }
+        }
+        
+        private void DrawModernRightPanel(Rect rect)
         {
             GUILayout.BeginArea(rect, EditorStyles.helpBox);
             
             if (selectedStat != null)
-                DrawStatEditor();
+                DrawModernStatEditor();
             else if (selectedContainer != null)
-                DrawContainerEditor();
+                DrawModernContainerEditor();
+            else if (selectedStatObject != null)
+                DrawModernStatObjectEditor();
             else
-                DrawWelcome();
+                DrawModernWelcome();
             
             GUILayout.EndArea();
         }
@@ -316,20 +538,250 @@ namespace StatForge.Editor
                 EditorUtility.SetDirty(selectedContainer);
         }
         
-        private void DrawWelcome()
+        private void DrawModernWelcome()
         {
             GUILayout.FlexibleSpace();
-            GUILayout.Label("StatForge Editor", EditorStyles.largeLabel);
-            GUILayout.Label("Select an item from the left panel to edit", EditorStyles.centeredGreyMiniLabel);
+            
+            var logoStyle = new GUIStyle(EditorStyles.largeLabel)
+            {
+                fontSize = 24,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+            
+            GUILayout.Label("StatForge", logoStyle);
+            GUILayout.Space(10);
+            
+            var subtitleStyle = new GUIStyle(EditorStyles.label)
+            {
+                fontSize = 14,
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = true
+            };
+            
+            GUILayout.Label("Modern stat management for Unity", subtitleStyle);
+            GUILayout.Space(20);
+            
+            var instructionStyle = new GUIStyle(EditorStyles.centeredGreyMiniLabel)
+            {
+                fontSize = 12,
+                wordWrap = true
+            };
+            
+            GUILayout.Label("Select an item from the left panel to begin editing", instructionStyle);
+            
+            GUILayout.Space(30);
+            
+            // Quick actions
+            EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
+            
+            if (GUILayout.Button("Create Stat Type", GUILayout.Width(120), GUILayout.Height(30)))
+            {
+                currentView = ViewMode.StatTypes;
+                CreateStatType();
+            }
+            
+            GUILayout.Space(10);
+            
+            if (GUILayout.Button("Create Container", GUILayout.Width(120), GUILayout.Height(30)))
+            {
+                currentView = ViewMode.Containers;
+                CreateContainer();
+            }
+            
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+            
+            GUILayout.FlexibleSpace();
+        }
+        
+        private void DrawModernStatEditor()
+        {
+            // Keep the original DrawStatEditor functionality but with modern styling
+            DrawStatEditor();
+        }
+        
+        private void DrawModernContainerEditor()
+        {
+            // Keep the original DrawContainerEditor functionality but with modern styling  
+            DrawContainerEditor();
+        }
+        
+        private void DrawModernStatObjectEditor()
+        {
+            if (selectedStatObject == null) return;
+            
+            // Header
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label($"Live Stats: {selectedStatObject.name}", headerStyle);
+            GUILayout.FlexibleSpace();
+            
+            if (GUILayout.Button("Select in Scene", GUILayout.Width(100)))
+            {
+                Selection.activeGameObject = selectedStatObject;
+                EditorGUIUtility.PingObject(selectedStatObject);
+            }
+            
+            EditorGUILayout.EndHorizontal();
+            
+            GUILayout.Space(10);
+            
+            rightScrollPos = GUILayout.BeginScrollView(rightScrollPos);
+            
+            var collection = selectedStatObject.GetStatCollection();
+            if (collection != null && collection.Stats.Count > 0)
+            {
+                foreach (var stat in collection.Stats)
+                {
+                    DrawStatCard(stat, selectedStatObject);
+                    GUILayout.Space(5);
+                }
+            }
+            else
+            {
+                GUILayout.Label("No stats found on this object", EditorStyles.centeredGreyMiniLabel);
+                GUILayout.Space(20);
+                
+                if (GUILayout.Button("Initialize Stats", GUILayout.Height(30)))
+                {
+                    selectedStatObject.InitializeStats();
+                    Repaint();
+                }
+            }
+            
+            GUILayout.EndScrollView();
+        }
+        
+        private void DrawStatCard(StatData stat, GameObject owner)
+        {
+            EditorGUILayout.BeginVertical(cardStyle);
+            
+            // Stat name and current value
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label(stat.Name, EditorStyles.boldLabel);
+            GUILayout.FlexibleSpace();
+            GUILayout.Label($"Value: {stat.GetValue():F2}", EditorStyles.label);
+            EditorGUILayout.EndHorizontal();
+            
+            // Base value editor
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label("Base Value:", GUILayout.Width(80));
+            var newBase = EditorGUILayout.FloatField(stat.BaseValue);
+            if (!Mathf.Approximately(newBase, stat.BaseValue))
+            {
+                owner.SetStat(stat.Name, newBase);
+            }
+            EditorGUILayout.EndHorizontal();
+            
+            // Show modifiers if any
+            var modifiers = owner.GetStatModifiers(stat.Name);
+            if (modifiers.Count > 0)
+            {
+                GUILayout.Space(5);
+                GUILayout.Label("Active Modifiers:", EditorStyles.miniLabel);
+                
+                foreach (var modifier in modifiers)
+                {
+                    EditorGUILayout.BeginHorizontal();
+                    GUILayout.Space(20);
+                    GUILayout.Label($"{modifier.Type}: {modifier.Value:F2}", EditorStyles.miniLabel);
+                    
+                    if (modifier.HasDuration)
+                    {
+                        GUILayout.Label($"({modifier.RemainingDuration:F1}s)", EditorStyles.miniLabel);
+                    }
+                    
+                    GUILayout.FlexibleSpace();
+                    
+                    if (GUILayout.Button("Remove", EditorStyles.miniButton, GUILayout.Width(50)))
+                    {
+                        owner.RemoveStatModifier(stat.Name, modifier);
+                    }
+                    
+                    EditorGUILayout.EndHorizontal();
+                }
+            }
+            
+            // Quick modifier buttons
+            GUILayout.Space(5);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label("Quick Modifiers:", EditorStyles.miniLabel, GUILayout.Width(100));
+            
+            if (GUILayout.Button("+10", EditorStyles.miniButton, GUILayout.Width(30)))
+            {
+                owner.ApplyTemporaryModifier(stat.Name, ModifierType.Additive, 10f, 5f);
+            }
+            if (GUILayout.Button("-10", EditorStyles.miniButton, GUILayout.Width(30)))
+            {
+                owner.ApplyTemporaryModifier(stat.Name, ModifierType.Additive, -10f, 5f);
+            }
+            if (GUILayout.Button("x2", EditorStyles.miniButton, GUILayout.Width(30)))
+            {
+                owner.ApplyTemporaryModifier(stat.Name, ModifierType.Multiplicative, 2f, 5f);
+            }
+            
+            EditorGUILayout.EndHorizontal();
+            
+            EditorGUILayout.EndVertical();
+        }
+        
+        private void RefreshStatObjects()
+        {
+            statObjects = new List<GameObject>();
+            
+            // Find all GameObjects in scene with StatCollection components or [Stat] attributes
+            var allObjects = FindObjectsOfType<MonoBehaviour>(true);
+            var objectsWithStats = new HashSet<GameObject>();
+            
+            foreach (var obj in allObjects)
+            {
+                // Check if object has a StatCollection
+                var collection = obj.gameObject.GetStatCollection();
+                if (collection != null && collection.Stats.Count > 0)
+                {
+                    objectsWithStats.Add(obj.gameObject);
+                    continue;
+                }
+                
+                // Check if object has [Stat] attributes
+                var type = obj.GetType();
+                var fields = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                
+                foreach (var field in fields)
+                {
+                    if (field.GetCustomAttribute<StatAttribute>() != null)
+                    {
+                        objectsWithStats.Add(obj.gameObject);
+                        break;
+                    }
+                }
+            }
+            
+            statObjects = objectsWithStats.ToList();
         }
         
         private void CreateNew()
         {
-            if (currentView == ViewMode.StatTypes)
-                CreateStatType();
-            else
-                CreateContainer();
+            switch (currentView)
+            {
+                case ViewMode.StatTypes:
+                    CreateStatType();
+                    break;
+                case ViewMode.Containers:
+                    CreateContainer();
+                    break;
+                case ViewMode.StatCollections:
+                    // For stat collections, we can't create new ones directly
+                    // Instead show a helpful message
+                    EditorUtility.DisplayDialog("Info", 
+                        "Live stat collections are automatically created when objects use [Stat] attributes or call StatExtensions methods.\n\n" +
+                        "To create stats on an object:\n" +
+                        "1. Add [Stat] attributes to fields\n" +
+                        "2. Call this.SetStat() in code\n" +
+                        "3. Use this.GetStat() to access values", "OK");
+                    break;
+            }
         }
         
         private void CreateStatType()
@@ -407,6 +859,12 @@ namespace StatForge.Editor
                 .Where(c => c != null)
                 .OrderBy(c => c.ContainerName)
                 .ToList();
+            
+            // Refresh stat objects if we're viewing them
+            if (currentView == ViewMode.StatCollections)
+            {
+                RefreshStatObjects();
+            }
             
             Repaint();
         }
