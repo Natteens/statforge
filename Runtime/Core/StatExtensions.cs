@@ -172,7 +172,8 @@ namespace StatForge
         public static StatCollection GetStatCollection(this GameObject gameObject)
         {
             InitializeIfNeeded(gameObject);
-            return _statCollections.GetValueOrDefault(gameObject);
+            _statCollections.TryGetValue(gameObject, out var collection);
+            return collection;
         }
         
         /// <summary>

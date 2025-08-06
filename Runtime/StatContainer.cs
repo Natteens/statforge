@@ -178,7 +178,8 @@ namespace StatForge
             if (statType == null) return null;
             
             if (statLookup == null) RefreshLookup();
-            return statLookup!.GetValueOrDefault(statType);
+            statLookup.TryGetValue(statType, out var stat);
+            return stat;
         }
         
         public StatValue GetOrCreateStat(StatType statType)
