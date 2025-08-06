@@ -1,8 +1,8 @@
 {
   "name": "com.natteens.statforge",
-  "version": "0.2.2",
+  "version": "1.0.0",
   "displayName": "StatForge",
-  "description": "Sistema modular de definição e manipulação de atributos (stats), com suporte a atributos derivados, modificadores e integração com qualquer tipo de entidade ou item.",
+  "description": "Sistema de atributos ultra-simplificado com API moderna. Use apenas [Stat] nos seus campos e tenha sintaxe natural, eventos tipados, cache inteligente e performance enterprise.",
   "keywords": [
     "Unity",
     "GameDev",

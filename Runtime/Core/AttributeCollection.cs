@@ -8,7 +8,7 @@ using StatForge.Core;
 namespace StatForge
 {
     /// <summary>
-    /// Thread-safe collection for managing attributes with auto-discovery
+    /// Thread-safe collection for managing attributes with auto-discovery and performance optimizations
     /// </summary>
     [Serializable]
     public class AttributeCollection
@@ -17,6 +17,11 @@ namespace StatForge
         private Dictionary<string, IAttributeBase> attributeLookup;
         private readonly object lockObject = new object();
         private bool isInitialized;
+        
+        // Performance optimizations
+        private static readonly StatCache cache = new StatCache();
+        private static readonly ObjectPool<AttributeChangedEvent> eventPool = 
+            new ObjectPool<AttributeChangedEvent>();
         
         public event Action<string, object, object> OnAttributeChanged; // name, oldValue, newValue
         
@@ -156,8 +161,20 @@ namespace StatForge
                 }
                 entry.attribute = wrapper;
                 
-                // Subscribe to changes
-                attribute.OnValueChanged += (oldVal, newVal) => OnAttributeChanged?.Invoke(name, oldVal, newVal);
+                // Subscribe to changes for event forwarding
+                attribute.OnValueChanged += (oldVal, newVal) => 
+                {
+                    OnAttributeChanged?.Invoke(name, oldVal, newVal);
+                    
+                    // Also publish through event bus
+                    EventBus.Publish(new AttributeChangedEvent
+                    {
+                        AttributeName = name,
+                        OldValue = oldVal,
+                        NewValue = newVal,
+                        Source = this
+                    });
+                };
             }
         }
         
@@ -180,23 +197,49 @@ namespace StatForge
         }
         
         /// <summary>
-        /// Get attribute value
+        /// Get attribute value with caching
         /// </summary>
         public T GetValue<T>(string name) where T : struct, IComparable<T>
         {
-            var attr = GetAttribute<T>(name);
-            return attr != null ? attr.Value : default(T);
+            // Use cache for frequently accessed values
+            var cacheKey = $"attr_value_{name}_{typeof(T).Name}";
+            return cache.GetOrCalculate(cacheKey, () =>
+            {
+                var attr = GetAttribute<T>(name);
+                return attr != null ? attr.Value : default(T);
+            }, 0.1f); // 100ms cache
         }
         
         /// <summary>
-        /// Set attribute value
+        /// Set attribute value with validation and events
         /// </summary>
         public void SetValue<T>(string name, T value) where T : struct, IComparable<T>
         {
+            // Validate before setting
+            if (!AttributeValidation.Validate(name, value))
+            {
+                Debug.LogWarning($"Validation failed for attribute '{name}' with value '{value}'");
+                return;
+            }
+            
             var attr = GetAttribute<T>(name);
             if (attr != null)
             {
+                var oldValue = attr.Value;
                 attr.Value = value;
+                
+                // Invalidate cache
+                var cacheKey = $"attr_value_{name}_{typeof(T).Name}";
+                cache.Invalidate(cacheKey);
+                
+                // Publish event through event bus
+                EventBus.Publish(new AttributeChangedEvent
+                {
+                    AttributeName = name,
+                    OldValue = oldValue,
+                    NewValue = value,
+                    Source = this
+                });
             }
         }
         

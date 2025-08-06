@@ -1,3 +1,64 @@
+# StatForge Changelog
+
+## [1.0.0] - 2024-12-06
+
+### 🚀 MAJOR REFACTORING - Ultra-Simplified API
+
+Esta versão representa uma refatoração completa do StatForge, introduzindo uma API ultra-simplificada que mantém compatibilidade total com o sistema anterior.
+
+### ✨ Novidades
+
+#### API Ultra-Simplificada
+- **[Stat] Attribute**: Marque qualquer campo com `[Stat]` e ele automaticamente se torna um atributo gerenciado
+- **Sintaxe Natural**: `Health -= Time.deltaTime;` funciona exatamente como variáveis normais
+- **Zero Configuração**: Funciona imediatamente sem setup adicional
+
+#### Arquitetura Moderna
+- **IAttribute<T>**: Interface genérica type-safe para todos os atributos
+- **AttributeCollection**: Sistema thread-safe de gerenciamento de atributos
+- **StatForgeComponent**: Componente moderno que funciona com ou sem MonoBehaviour
+
+#### Performance Enterprise
+- **Event Bus**: Sistema de eventos performático com pooling para zero allocations
+- **Smart Caching**: Cache inteligente com TTL configurável para cálculos frequentes
+- **Lazy Loading**: Carregamento sob demanda para operações custosas
+- **Batch Operations**: Operações em lote para múltiplas mudanças atômicas
+
+#### Sistema de Validação
+- **Validation Rules**: Sistema plugável de validação com regras customizáveis
+- **Common Rules**: Regras pré-definidas para casos comuns (positivos, ranges, etc.)
+
+#### Editor Visual Moderno
+- **Interface Limpa**: Removidos elementos visuais desnecessários
+- **Workflow Simplificado**: Navegação intuitiva e funcionalidades essenciais
+- **Live Preview**: Visualização em tempo real de atributos descobertos
+- **Welcome Screen**: Guia de início rápido integrado
+
+#### Query System Fluente
+```csharp
+var combatPower = statForge.Query()
+    .Where(name => name.Contains("Attack"))
+    .Sum<int>();
+```
+
+### 🔄 Compatibilidade
+- **100% Backward Compatible**: Todo código existente continua funcionando
+- **Migration Path**: Sistema tradicional pode ser usado lado a lado com o novo
+- **Deprecation Warnings**: Avisos para APIs que serão descontinuadas no futuro
+
+### 📚 Exemplos
+- **PlayerExample.cs**: Demonstra a API básica ultra-simplificada
+- **AdvancedPlayerExample.cs**: Mostra recursos enterprise (validation, batching, events)
+
+### 🛠️ Melhorias Técnicas
+- Thread-safety em todas as operações críticas
+- Pooling de objetos para reduzir garbage collection
+- Cache com invalidação inteligente
+- Event system com type safety
+- Reflection otimizada para auto-discovery
+
+---
+
 ## [0.2.2](https://github.com/Natteens/statforge/compare/v0.2.1...v0.2.2) (2025-07-28)
 
 

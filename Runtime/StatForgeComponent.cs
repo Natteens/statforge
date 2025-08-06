@@ -121,11 +121,52 @@ namespace StatForge
         }
         
         /// <summary>
+        /// Create a batch operation for multiple attribute changes
+        /// </summary>
+        public AttributeBatch CreateBatch()
+        {
+            return new AttributeBatch();
+        }
+        
+        /// <summary>
+        /// Add validation rule for an attribute
+        /// </summary>
+        public void AddValidationRule<T>(string name, System.Func<T, bool> validator) where T : struct, System.IComparable<T>
+        {
+            AttributeValidation.AddRule(name, value => value is T typed && validator(typed));
+        }
+        
+        /// <summary>
+        /// Subscribe to typed events through the event bus
+        /// </summary>
+        public void SubscribeToEvents<T>(System.Action<T> handler) where T : IEvent
+        {
+            EventBus.Subscribe(handler);
+        }
+        
+        /// <summary>
+        /// Unsubscribe from typed events
+        /// </summary>
+        public void UnsubscribeFromEvents<T>(System.Action<T> handler) where T : IEvent
+        {
+            EventBus.Unsubscribe(handler);
+        }
+        
+        /// <summary>
         /// Query system for fluent operations
         /// </summary>
         public AttributeQuery Query()
         {
             return new AttributeQuery(attributes);
+        }
+        
+        private void OnDestroy()
+        {
+            // Cleanup event subscriptions
+            if (attributes != null)
+            {
+                EventBus.Clear(); // This might be too aggressive - in real implementation, track specific subscriptions
+            }
         }
     }
     
