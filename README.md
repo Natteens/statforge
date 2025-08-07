@@ -8,9 +8,76 @@
 
 **StatForge** é um sistema modular e poderoso para Unity que permite criar, gerenciar e manipular atributos (stats) de forma flexível e eficiente. Ideal para RPGs, jogos de estratégia, simuladores e qualquer projeto que precise de um sistema robusto de características.
 
-## 🚀 API Simplificada (Nova!)
+## 🚀 StatForge v2: Ultra-Simplified API (NEW!)
 
-A partir da versão 0.3.0, StatForge oferece uma API ultra-simplificada que torna o uso de stats extremamente fácil:
+A partir da versão 0.3.0, StatForge oferece uma API **completamente transparente** onde você simplesmente declara e usa stats sem nenhuma configuração:
+
+```csharp
+public class Player : MonoBehaviour
+{
+    // Qualquer uma dessas sintaxes funciona:
+    public Stat health;                    // Público
+    [SerializeField] private Stat mana;    // Privado serializado
+    protected Stat stamina;                // Protegido
+    
+    // Zero inicialização necessária - tudo automático!
+    void Start()
+    {
+        health.Value = 100f;           // Funciona imediatamente
+        mana += 25f;                   // Operator overloads
+        bool alive = health > 0f;      // Comparações diretas
+        
+        Debug.Log($"Total: {stamina}"); // ToString automático
+    }
+}
+```
+
+### ✨ Funcionalidades v2
+
+#### 🎯 **Zero Setup** - Use imediatamente
+```csharp
+public Stat health;  // Funciona na hora, sem configuração!
+
+void Start() {
+    health.Value = 100f;  // ✅ Funciona
+    health += 25f;        // ✅ Funciona  
+    health *= 1.5f;       // ✅ Funciona
+}
+```
+
+#### 🔧 **Operator Overloads** naturais
+```csharp
+health += 25f;              // Adiciona modificador temporário
+mana -= 10f;                // Remove valor temporariamente
+damage *= 1.5f;             // Multiplicador temporário
+bool isAlive = health > 0f; // Comparação direta
+```
+
+#### ⚡ **Métodos de Conveniência**
+```csharp
+health.Buff(50f, 10f);      // +50 por 10 segundos
+health.Debuff(25f, 5f);     // -25 por 5 segundos
+health.Percent(25f);        // +25% do valor atual
+health.Override(200f, 3f);  // Define valor por 3 segundos
+```
+
+#### 🔄 **Conversões Automáticas**
+```csharp
+float value = health;       // Conversão implícita
+int intValue = health.ToInt();
+bool hasHealth = health.ToBool();
+string text = health.ToString("F1");
+```
+
+#### 📊 **Inspector Inteligente**
+- **Dropdown automático** para escolher StatDefinitions
+- **Preview em tempo real** de fórmulas e valores
+- **Validação automática** de dependências
+- **Debug runtime** com detalhes de modificadores
+
+### 🎮 API Legacy (Compatível)
+
+A API original continua funcionando perfeitamente:
 
 ```csharp
 public class Player : MonoBehaviour

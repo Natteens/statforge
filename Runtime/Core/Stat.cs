@@ -292,6 +292,16 @@ namespace StatForge
         #region Constructors
         
         /// <summary>
+        /// Creates a new stat with zero setup - will auto-initialize on first use.
+        /// This enables the ultra-simplified experience where you just declare and use.
+        /// </summary>
+        public Stat()
+        {
+            // Leave everything as default - will auto-initialize on first access
+            InitializeRuntime();
+        }
+        
+        /// <summary>
         /// Creates a new stat with the specified name and base value.
         /// </summary>
         public Stat(string name, float baseValue = 0f)
