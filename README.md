@@ -1,23 +1,61 @@
 # 🔧 StatForge
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Unity-6000.0.54f1+-blue?logo=unity" alt="Unity Version">
+  <img src="https://img.shields.io/badge/Unity-2023.3+-blue?logo=unity" alt="Unity Version">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
-  <img src="https://img.shields.io/badge/Version-0.2.0-orange" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.0.0-orange" alt="Version">
 </p>
 
-**StatForge** é um sistema modular e poderoso para Unity que permite criar, gerenciar e manipular atributos (stats) de forma flexível e eficiente. Ideal para RPGs, jogos de estratégia, simuladores e qualquer projeto que precise de um sistema robusto de características.
+**StatForge** é um sistema modular e poderoso para Unity que permite criar, gerenciar e manipular atributos (stats) de forma flexível e eficiente. **Versão 1.0 apresenta uma API completamente refatorada e simplificada!**
 
-## ✨ Principais Características
+## 🆕 Nova API Simplificada (v1.0)
 
+### ✨ Uso Direto - Sem Inicialização!
+
+```csharp
+public class PlayerHealth : MonoBehaviour 
+{
+    [SerializeField] private Stat maxHealth;    // Drag & drop no inspector!
+    [SerializeField] private Stat currentHealth;
+    
+    void Start() 
+    {
+        currentHealth.Value = maxHealth.Value; // ✨ Funciona imediatamente!
+    }
+    
+    public void TakeDamage(float damage) 
+    {
+        currentHealth.Value -= damage; // 🎯 API simples e direta
+    }
+}
+```
+
+### 🚀 Principais Melhorias
+
+- 🎯 **API Zero-Config**: Use stats diretamente sem inicialização
+- 🎨 **Inspector Inteligente**: Detecção automática de campos Stat
+- 🏷️ **Sistema de Abreviações**: STR, DEX, HP, MP, etc.
+- ⚡ **Performance Otimizada**: Zero reflection em runtime  
+- 🎛️ **Modificadores Avançados**: Sistema completo com duração e origem
+- 📊 **Eventos Robustos**: Sistema global e por-stat
+- 🔄 **Compatibilidade**: Sistema legado continua funcionando
+- 🎨 **Editor Visual**: Interface moderna com cores e ícones
+
+## ✨ Características Principais
+
+### 🆕 Novo Sistema
+- 📊 **StatDefinition**: Versão aprimorada com cores e ícones
+- 🎯 **Classe Stat**: Referência simples para uso direto
+- 🎨 **Editor Avançado**: Interface tabular moderna
+- 🔄 **Migração Automática**: Ferramentas para atualizar projetos existentes
+- ⚡ **Sistema de Eventos**: Global e por instância
+
+### 📋 Sistema Legado (Ainda Suportado)
 - 🎯 **Sistema de Categorias**: Primary, Derived e External stats
-- 📊 **Fórmulas Dinâmicas**: Calcule stats derivados usando fórmulas customizáveis
+- 📊 **Fórmulas Dinâmicas**: Calcule stats derivados com abreviações
 - 🔧 **Editor Visual**: Interface completa para criação e gerenciamento
-- 📦 **Containers Modulares**: Organize stats por categoria (Base, Entity, Class, Item, Skill)
-- 🎛️ **Sistema de Pontos**: Alocação e desalocação dinâmica de pontos
-- ⚡ **Performance Otimizada**: Cache inteligente e recálculo eficiente
-- 🔄 **Modificadores Temporários**: Buffs, debuffs e efeitos temporários
-- 📋 **Templates**: Crie e reutilize configurações de stats
+- 📦 **Containers Modulares**: Organize stats por categoria
+- 🎛️ **Sistema de Pontos**: Alocação e desalocação dinâmica
 
 ## 📥 Instalação
 
@@ -83,40 +121,115 @@ Componente Unity que controla todo o sistema:
 
 ## 🚀 Guia de Uso Rápido
 
-### 1. Criando Seus Primeiros Stats
+### 🆕 Nova API Simplificada (Recomendada)
 
-1. Abra o **StatForge Manager**: `Tools > StatForge > Manager`
-2. Na aba **Stat Types**, clique em **+** para criar um novo stat
-3. Configure as propriedades básicas:
-
-```csharp
-// Exemplo de configuração
-Display Name: "Força"
-Short Name: "STR"
-Category: Primary
-Default Value: 10
-Min Value: 1
-Max Value: 100
-```
-
-### 2. Criando Stats Derivados
-
-Para stats que dependem de outros (como HP baseado em Constituição):
+#### 1. Criando StatDefinitions
+1. Abra o **StatForge Window**: `Tools > StatForge > StatForge Window`
+2. Na aba **Definitions**, clique em **+** para criar uma nova StatDefinition
+3. Configure as propriedades:
 
 ```csharp
 Display Name: "Health Points"
-Short Name: "HP"
-Category: Derived
-Formula: "CON * 10 + 50"
+Short Name: "Health" 
+Abbreviation: "HP"
+Category: Primary
+Default Value: 100
+Color: Red (para identificação visual)
 ```
 
-### 3. Configurando um Container
+#### 2. Usando Stats em Componentes
 
-1. Na aba **Containers**, crie um novo container
-2. Adicione os stats desejados
-3. Configure os valores base para cada stat
+```csharp
+using StatForge;
 
-### 4. Usando no Código
+public class Character : MonoBehaviour
+{
+    [Header("Basic Stats")]
+    [SerializeField] private Stat health;      // Configurado no inspector
+    [SerializeField] private Stat mana;        // Drag & drop StatDefinition
+    [SerializeField] private Stat strength;
+    
+    void Start()
+    {
+        // ✨ Nenhuma inicialização necessária!
+        
+        // Eventos simples
+        health.OnValueChanged += OnHealthChanged;
+        
+        // Ou eventos avançados
+        health.Events.OnValueChanged += (oldVal, newVal) => 
+            Debug.Log($"Health: {oldVal} -> {newVal}");
+        
+        // Modificadores com duração
+        strength.AddTemporaryBonus(10f, 30f); // +10 por 30 segundos
+    }
+    
+    void OnHealthChanged(Stat stat)
+    {
+        Debug.Log($"Health is now: {stat.Value}");
+        
+        // Verificar porcentagem
+        if (stat.GetPercentage() <= 0.2f) 
+        {
+            Debug.LogWarning("Low health!");
+        }
+    }
+    
+    [ContextMenu("Take Damage")]
+    void TakeDamage()
+    {
+        health.Value -= 25f; // API direta!
+    }
+}
+```
+
+#### 3. Sistema de Modificadores Avançado
+
+```csharp
+// Buff temporário
+var strengthBuff = new StatModifier(
+    value: 15f,                               // +15 de força
+    type: StatModifier.ModifierType.Flat,     // Valor fixo
+    duration: 60f,                            // 60 segundos
+    source: "Strength Potion"                 // Fonte para tracking
+);
+strength.AddModifier(strengthBuff);
+
+// Buff percentual
+var defenseBoost = new StatModifier(
+    value: 25f,                               // +25%
+    type: StatModifier.ModifierType.Percentage,
+    duration: 120f,
+    source: "Shield Spell"
+);
+defense.AddModifier(defenseBoost);
+
+// Remover por fonte
+defense.RemoveModifiersFromSource("Shield Spell");
+```
+
+#### 4. Extension Methods Para Produtividade
+
+```csharp
+// Métodos de conveniência
+health.FillToMax();           // health.Value = health.StatType.MaxValue
+health.EmptyToMin();          // health.Value = health.StatType.MinValue  
+health.ResetToDefault();      // health.Value = health.StatType.DefaultValue
+
+// Buscar stats por nome/abreviação
+var hpStat = this.GetStat("HP");          // Por abreviação
+var manaStat = this.GetStat("Mana");      // Por nome
+
+// Filtrar por categoria  
+var allStats = this.GetAllStats();
+var primaryStats = allStats.FilterByCategory(StatCategory.Primary);
+```
+
+### 📋 Sistema Legado (Para Projetos Existentes)
+
+Se você já usa o StatForge, seu código continua funcionando! O sistema legado com `AttributeSystem` e `StatContainer` está totalmente preservado.
+
+#### Usando AttributeSystem (Legado)
 
 ```csharp
 using StatForge;
@@ -127,16 +240,12 @@ public class Character : MonoBehaviour
     
     void Start()
     {
-        // Dar pontos para alocar
+        // Sistema legado ainda funciona
         attributeSystem.SetAvailablePoints(20);
         
-        // Obter valor de um stat
         float strength = attributeSystem.GetStatValue(strengthStat);
-        
-        // Adicionar modificador temporário (buff)
         attributeSystem.AddTemporaryBonus(strengthStat, 5f);
         
-        // Alocar ponto em um stat
         if (attributeSystem.CanAllocatePoint(strengthStat))
         {
             attributeSystem.AllocatePoint(strengthStat);
