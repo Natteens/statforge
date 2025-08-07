@@ -10,10 +10,10 @@ namespace StatForge.Examples
     public class NewAPIPlayerExample : MonoBehaviour
     {
         [Header("Ultra-Simplified Syntax - ANY of these work:")]
-        public Stat health;                    // Public field - auto-initializes
-        [SerializeField] private Stat mana;    // Private serialized - works too
-        protected Stat stamina;                // Protected - also works
-        internal Stat energy;                  // Internal - still works
+        public Stat health = new Stat("Health", 100f);                    // Auto-initializes
+        [SerializeField] private Stat mana = new Stat("Mana", 50f);       // Private serialized 
+        protected Stat stamina = new Stat("Stamina", 75f);                // Protected - also works
+        internal Stat energy = new Stat("Energy", 25f);                   // Internal - still works
         
         [Header("Derived Stats with Formulas")]
         public Stat damage = new Stat("Damage", "health * 0.1 + strength * 2");
