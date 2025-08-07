@@ -11,6 +11,7 @@ namespace StatForge
     public class StatDefinition : ScriptableObject
     {
         [Header("Basic Information")]
+        [SerializeField] private string guid = System.Guid.NewGuid().ToString();
         [SerializeField] private string statName = "NewStat";
         [SerializeField] private string description = "";
         [SerializeField] private string category = "General";
@@ -34,6 +35,7 @@ namespace StatForge
         
         #region Properties
         
+        public string Guid => guid;
         public string StatName => statName;
         public string Description => description;
         public string Category => category;
@@ -138,6 +140,24 @@ namespace StatForge
         }
         
         /// <summary>
+        /// Finds a stat definition by GUID.
+        /// </summary>
+        public static StatDefinition FindByGuid(string guid)
+        {
+            if (string.IsNullOrEmpty(guid)) return null;
+            
+            var definitions = GetAllDefinitions();
+            foreach (var definition in definitions)
+            {
+                if (definition.Guid == guid)
+                {
+                    return definition;
+                }
+            }
+            return null;
+        }
+        
+        /// <summary>
         /// Finds a stat definition by name.
         /// </summary>
         public static StatDefinition FindByName(string name)
@@ -155,6 +175,10 @@ namespace StatForge
         
         private void OnValidate()
         {
+            // Ensure valid GUID
+            if (string.IsNullOrEmpty(guid))
+                guid = System.Guid.NewGuid().ToString();
+            
             // Ensure valid values
             if (string.IsNullOrEmpty(statName))
                 statName = "NewStat";

@@ -7,10 +7,10 @@ namespace StatForge
 {
     /// <summary>
     /// Individual stat that can work independently with its own modifiers, formulas, and values.
-    /// This is the core class for the new simplified StatForge API.
+    /// This is the core class for the new simplified StatForge API with auto-initialization.
     /// </summary>
     [Serializable]
-    public class Stat
+    public class Stat : ISerializationCallbackReceiver
     {
         [SerializeField] private string _name;
         [SerializeField] private float _baseValue;
@@ -18,6 +18,7 @@ namespace StatForge
         [SerializeField] private float _minValue = 0f;
         [SerializeField] private float _maxValue = float.MaxValue;
         [SerializeField] private bool _allowModifiers = true;
+        [SerializeField] private string _definitionGuid; // Reference to global StatDefinition
         
         // Runtime data (not serialized)
         [NonSerialized] private List<IStatModifier> _modifiers = new List<IStatModifier>();
@@ -26,6 +27,8 @@ namespace StatForge
         [NonSerialized] private GameObject _owner;
         [NonSerialized] private StatCollection _parentCollection;
         [NonSerialized] private bool _isCalculating = false; // Prevent circular references
+        [NonSerialized] private bool _isInitialized = false; // Track initialization state
+        [NonSerialized] private StatDefinition _cachedDefinition; // Cached reference to definition
         
         /// <summary>
         /// Event fired when this stat's value changes.
@@ -90,11 +93,13 @@ namespace StatForge
         
         /// <summary>
         /// Final calculated value including base value, formula, and modifiers.
+        /// Automatically initializes if needed.
         /// </summary>
         public float Value
         {
             get
             {
+                EnsureInitialized();
                 if (_isDirty || !_cachedValue.HasValue)
                 {
                     _cachedValue = CalculateValue();
@@ -159,6 +164,127 @@ namespace StatForge
         {
             get => _owner;
             internal set => _owner = value;
+        }
+        
+        /// <summary>
+        /// Reference to the StatDefinition this stat is based on (if any).
+        /// </summary>
+        public StatDefinition Definition
+        {
+            get
+            {
+                if (_cachedDefinition == null && !string.IsNullOrEmpty(_definitionGuid))
+                {
+                    _cachedDefinition = StatDefinition.FindByGuid(_definitionGuid);
+                }
+                return _cachedDefinition;
+            }
+            set
+            {
+                _cachedDefinition = value;
+                _definitionGuid = value?.Guid ?? "";
+                if (value != null)
+                {
+                    LoadFromDefinition();
+                }
+            }
+        }
+        
+        #endregion
+        
+        #region Auto-Initialization
+        
+        /// <summary>
+        /// Ensures the stat is properly initialized before use.
+        /// This enables the "zero-setup" experience.
+        /// </summary>
+        private void EnsureInitialized()
+        {
+            if (!_isInitialized)
+            {
+                AutoInitialize();
+            }
+        }
+        
+        /// <summary>
+        /// Automatically initializes the stat with sensible defaults.
+        /// </summary>
+        private void AutoInitialize()
+        {
+            InitializeRuntime();
+            
+            // If we have a definition GUID, try to load it
+            if (!string.IsNullOrEmpty(_definitionGuid))
+            {
+                LoadFromDefinition();
+            }
+            
+            // If no name is set, create a default one
+            if (string.IsNullOrEmpty(_name))
+            {
+                _name = "Stat_" + GetHashCode().ToString("X");
+            }
+            
+            _isInitialized = true;
+        }
+        
+        /// <summary>
+        /// Loads stat configuration from a StatDefinition if available.
+        /// </summary>
+        private void LoadFromDefinition()
+        {
+            if (string.IsNullOrEmpty(_definitionGuid)) return;
+            
+            if (_cachedDefinition == null)
+            {
+                _cachedDefinition = StatDefinition.FindByGuid(_definitionGuid);
+            }
+            
+            if (_cachedDefinition != null)
+            {
+                // Only apply definition values if they haven't been manually set
+                if (string.IsNullOrEmpty(_name))
+                    _name = _cachedDefinition.StatName;
+                    
+                if (_baseValue == 0f && _cachedDefinition.DefaultBaseValue != 0f)
+                    _baseValue = _cachedDefinition.DefaultBaseValue;
+                    
+                if (string.IsNullOrEmpty(_formula) && !string.IsNullOrEmpty(_cachedDefinition.DefaultFormula))
+                    _formula = _cachedDefinition.DefaultFormula;
+                    
+                _minValue = _cachedDefinition.MinValue;
+                _maxValue = _cachedDefinition.MaxValue;
+                _allowModifiers = _cachedDefinition.AllowModifiers;
+            }
+        }
+        
+        #endregion
+        
+        #region Unity Serialization
+        
+        /// <summary>
+        /// Called before Unity serializes this object.
+        /// </summary>
+        public void OnBeforeSerialize()
+        {
+            // Nothing special needed for serialization
+        }
+        
+        /// <summary>
+        /// Called after Unity deserializes this object.
+        /// Ensures proper initialization after loading.
+        /// </summary>
+        public void OnAfterDeserialize()
+        {
+            // Reset initialization state so it will be re-initialized on first use
+            _isInitialized = false;
+            _isDirty = true;
+            _cachedValue = null;
+            _cachedDefinition = null;
+            
+            // Initialize runtime data
+            if (_modifiers == null)
+                _modifiers = new List<IStatModifier>();
         }
         
         #endregion
@@ -483,11 +609,176 @@ namespace StatForge
         }
         
         /// <summary>
+        /// Addition operator - adds a temporary additive modifier.
+        /// </summary>
+        public static Stat operator +(Stat stat, float value)
+        {
+            if (stat != null)
+            {
+                stat.AddTemporaryBonus(value);
+            }
+            return stat;
+        }
+        
+        /// <summary>
+        /// Subtraction operator - adds a temporary negative modifier.
+        /// </summary>
+        public static Stat operator -(Stat stat, float value)
+        {
+            if (stat != null)
+            {
+                stat.AddTemporaryBonus(-value);
+            }
+            return stat;
+        }
+        
+        /// <summary>
+        /// Multiplication operator - adds a temporary multiplicative modifier.
+        /// </summary>
+        public static Stat operator *(Stat stat, float multiplier)
+        {
+            if (stat != null)
+            {
+                stat.AddTemporaryMultiplier(multiplier);
+            }
+            return stat;
+        }
+        
+        /// <summary>
+        /// Division operator - adds a temporary divisive modifier.
+        /// </summary>
+        public static Stat operator /(Stat stat, float divisor)
+        {
+            if (stat != null && divisor != 0f)
+            {
+                stat.AddTemporaryMultiplier(1f / divisor);
+            }
+            return stat;
+        }
+        
+        /// <summary>
+        /// Greater than comparison.
+        /// </summary>
+        public static bool operator >(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) > value;
+        }
+        
+        /// <summary>
+        /// Less than comparison.
+        /// </summary>
+        public static bool operator <(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) < value;
+        }
+        
+        /// <summary>
+        /// Greater than or equal comparison.
+        /// </summary>
+        public static bool operator >=(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) >= value;
+        }
+        
+        /// <summary>
+        /// Less than or equal comparison.
+        /// </summary>
+        public static bool operator <=(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) <= value;
+        }
+        
+        /// <summary>
+        /// Equality comparison.
+        /// </summary>
+        public static bool operator ==(Stat stat, float value)
+        {
+            return Mathf.Approximately(stat?.Value ?? 0f, value);
+        }
+        
+        /// <summary>
+        /// Inequality comparison.
+        /// </summary>
+        public static bool operator !=(Stat stat, float value)
+        {
+            return !Mathf.Approximately(stat?.Value ?? 0f, value);
+        }
+        
+        /// <summary>
         /// String representation for debugging.
         /// </summary>
         public override string ToString()
         {
+            EnsureInitialized();
             return $"{_name}: {Value:F2}" + (IsDerived ? $" (formula: {_formula})" : "");
+        }
+        
+        /// <summary>
+        /// Override GetHashCode to support equality operators.
+        /// </summary>
+        public override int GetHashCode()
+        {
+            return _name?.GetHashCode() ?? 0;
+        }
+        
+        /// <summary>
+        /// Override Equals to support equality operators.
+        /// </summary>
+        public override bool Equals(object obj)
+        {
+            if (obj is Stat other)
+            {
+                return _name == other._name && Mathf.Approximately(Value, other.Value);
+            }
+            if (obj is float floatValue)
+            {
+                return Mathf.Approximately(Value, floatValue);
+            }
+            return false;
+        }
+        
+        #endregion
+        
+        #region Convenience Methods
+        
+        /// <summary>
+        /// Applies a temporary additive modifier (buff).
+        /// </summary>
+        public IStatModifier Buff(float value, float duration = -1f)
+        {
+            return AddTemporaryBonus(value, duration);
+        }
+        
+        /// <summary>
+        /// Applies a temporary negative modifier (debuff).
+        /// </summary>
+        public IStatModifier Debuff(float value, float duration = -1f)
+        {
+            return AddTemporaryBonus(-value, duration);
+        }
+        
+        /// <summary>
+        /// Applies a permanent additive bonus.
+        /// </summary>
+        public IStatModifier AddBonus(float value)
+        {
+            return AddTemporaryBonus(value, -1f);
+        }
+        
+        /// <summary>
+        /// Applies a permanent multiplicative bonus.
+        /// </summary>
+        public IStatModifier AddMultiplier(float multiplier)
+        {
+            return AddTemporaryMultiplier(multiplier, -1f);
+        }
+        
+        /// <summary>
+        /// Sets a temporary override value.
+        /// </summary>
+        public IStatModifier Override(float value, float duration = -1f)
+        {
+            return SetTemporaryValue(value, duration);
         }
         
         #endregion
