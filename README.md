@@ -8,16 +8,57 @@
 
 **StatForge** é um sistema modular e poderoso para Unity que permite criar, gerenciar e manipular atributos (stats) de forma flexível e eficiente. Ideal para RPGs, jogos de estratégia, simuladores e qualquer projeto que precise de um sistema robusto de características.
 
+## 🚀 API Simplificada (Nova!)
+
+A partir da versão 0.3.0, StatForge oferece uma API ultra-simplificada que torna o uso de stats extremamente fácil:
+
+```csharp
+public class Player : MonoBehaviour
+{
+    [Stat] public float health = 100f;
+    [Stat] public int level = 1;
+    [Stat] public float mana = 50f;
+    
+    void Start()
+    {
+        // API ultra simples:
+        this.SetStat("health", 150f);
+        float currentHealth = this.GetStat("health");
+        
+        // Ou ainda mais direto:
+        health = 150f; // Atualiza automaticamente
+    }
+}
+```
+
+### Funciona Sem MonoBehaviour
+```csharp
+// Sistema independente:
+var stats = new StatCollection();
+stats.Set("strength", 10);
+stats.Set("health", stats.Get("strength") * 10);
+```
+
+### Sistema de Eventos Global
+```csharp
+StatEvents.OnStatChanged += (owner, statName, oldValue, newValue) => {
+    Debug.Log($"{statName}: {oldValue} → {newValue}");
+};
+```
+
 ## ✨ Principais Características
 
+- 🚀 **API Simplificada**: Use `[Stat]` em campos para setup automático
 - 🎯 **Sistema de Categorias**: Primary, Derived e External stats
 - 📊 **Fórmulas Dinâmicas**: Calcule stats derivados usando fórmulas customizáveis
-- 🔧 **Editor Visual**: Interface completa para criação e gerenciamento
+- 🎨 **Editor Moderno**: Interface limpa e profissional (sem emojis!)
+- 🔍 **Debug em Tempo Real**: Visualize stats de objetos ativos na cena
 - 📦 **Containers Modulares**: Organize stats por categoria (Base, Entity, Class, Item, Skill)
 - 🎛️ **Sistema de Pontos**: Alocação e desalocação dinâmica de pontos
 - ⚡ **Performance Otimizada**: Cache inteligente e recálculo eficiente
-- 🔄 **Modificadores Temporários**: Buffs, debuffs e efeitos temporários
+- 🔄 **Modificadores Temporários**: Buffs, debuffs e efeitos temporários com auto-dispose
 - 📋 **Templates**: Crie e reutilize configurações de stats
+- 🔗 **Compatibilidade Total**: Funciona com sistema existente
 
 ## 📥 Instalação
 
