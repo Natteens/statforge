@@ -255,7 +255,8 @@ namespace StatForge
                 return true;
             
             var referencedStats = FormulaEvaluator.ExtractStatReferences(derivedStat.Formula);
-            return referencedStats.Contains(dependency.ShortName);
+            return referencedStats.Contains(dependency.ShortName) || 
+                   (!string.IsNullOrEmpty(dependency.Abbreviation) && referencedStats.Contains(dependency.Abbreviation));
         }
         
         private void RecalculateAllDerived()

@@ -108,7 +108,11 @@ namespace StatForge.Editor
                 EditorGUILayout.BeginVertical(style);
                 
                 GUILayout.Label(stat.DisplayName, EditorStyles.boldLabel);
-                GUILayout.Label($"({stat.ShortName}) - {stat.Category}", EditorStyles.miniLabel);
+                var infoText = $"({stat.ShortName})";
+                if (!string.IsNullOrEmpty(stat.Abbreviation))
+                    infoText += $" [{stat.Abbreviation}]";
+                infoText += $" - {stat.Category}";
+                GUILayout.Label(infoText, EditorStyles.miniLabel);
                 
                 EditorGUILayout.EndVertical();
                 
@@ -190,6 +194,7 @@ namespace StatForge.Editor
             // Fields
             selectedStat.DisplayName = EditorGUILayout.TextField("Display Name", selectedStat.DisplayName);
             selectedStat.ShortName = EditorGUILayout.TextField("Short Name", selectedStat.ShortName);
+            selectedStat.Abbreviation = EditorGUILayout.TextField("Abbreviation", selectedStat.Abbreviation);
             selectedStat.Category = (StatCategory)EditorGUILayout.EnumPopup("Category", selectedStat.Category);
             selectedStat.DefaultValue = EditorGUILayout.FloatField("Default Value", selectedStat.DefaultValue);
             selectedStat.MinValue = EditorGUILayout.FloatField("Min Value", selectedStat.MinValue);

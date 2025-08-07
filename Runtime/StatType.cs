@@ -9,6 +9,7 @@ namespace StatForge
         [Header("Basic Information")]
         [SerializeField] private string displayName = "";
         [SerializeField] private string shortName = "";
+        [SerializeField] private string abbreviation = "";
         [SerializeField] private StatCategory category = StatCategory.Primary;
         
         [Header("Value Configuration")]
@@ -31,6 +32,12 @@ namespace StatForge
         { 
             get => shortName; 
             set => shortName = value; 
+        }
+        
+        public string Abbreviation 
+        { 
+            get => abbreviation; 
+            set => abbreviation = value; 
         }
         
         public StatCategory Category 
@@ -76,6 +83,9 @@ namespace StatForge
             
             if (!string.IsNullOrEmpty(shortName))
                 shortName = shortName.Replace(" ", "");
+            
+            if (!string.IsNullOrEmpty(abbreviation))
+                abbreviation = abbreviation.Replace(" ", "").ToUpper();
             
             if (category == StatCategory.Derived && string.IsNullOrEmpty(formula))
             {

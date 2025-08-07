@@ -93,7 +93,8 @@ namespace StatForge
         {
             return container.Stats.FirstOrDefault(s => 
                 s.statType != null && 
-                string.Equals(s.statType.ShortName, shortName, StringComparison.OrdinalIgnoreCase));
+                (string.Equals(s.statType.ShortName, shortName, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(s.statType.Abbreviation, shortName, StringComparison.OrdinalIgnoreCase)));
         }
         
         private static float EvaluateMathExpression(string expression)
