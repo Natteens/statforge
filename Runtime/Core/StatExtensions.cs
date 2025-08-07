@@ -203,6 +203,30 @@ namespace StatForge
             {
                 collection.Update(deltaTime);
             }
+            
+            // Also update individual Stat objects
+            UpdateIndividualStats(gameObject, deltaTime);
+        }
+        
+        private static void UpdateIndividualStats(GameObject gameObject, float deltaTime)
+        {
+            if (!_fieldCache.TryGetValue(gameObject, out var fields)) return;
+            
+            var components = gameObject.GetComponents<MonoBehaviour>();
+            foreach (var component in components)
+            {
+                if (component == null) continue;
+                
+                foreach (var fieldEntry in fields)
+                {
+                    var field = fieldEntry.Value;
+                    if (field.FieldType == typeof(Stat) && field.DeclaringType == component.GetType())
+                    {
+                        var stat = field.GetValue(component) as Stat;
+                        stat?.Update(deltaTime);
+                    }
+                }
+            }
         }
         
         /// <summary>
@@ -262,16 +286,35 @@ namespace StatForge
                     foreach (var field in fields)
                     {
                         var statAttr = field.GetCustomAttribute<StatAttribute>();
-                        if (statAttr != null && (field.FieldType == typeof(float) || field.FieldType == typeof(int)))
+                        if (statAttr != null)
                         {
                             var statName = !string.IsNullOrEmpty(statAttr.Name) ? statAttr.Name : field.Name;
                             _fieldCache[gameObject][statName] = field;
                             
-                            // Initialize stat with field value
-                            var value = Convert.ToSingle(field.GetValue(component));
-                            if (_statCollections.TryGetValue(gameObject, out var collection))
+                            // Handle different field types
+                            if (field.FieldType == typeof(Stat))
                             {
-                                collection.Set(statName, value);
+                                // New Stat object
+                                var stat = field.GetValue(component) as Stat;
+                                if (stat != null)
+                                {
+                                    stat.Owner = gameObject;
+                                    stat.InitializeRuntime();
+                                    if (_statCollections.TryGetValue(gameObject, out var collection))
+                                    {
+                                        stat.SetParentCollection(collection);
+                                        collection.Set(statName, stat.Value);
+                                    }
+                                }
+                            }
+                            else if (field.FieldType == typeof(float) || field.FieldType == typeof(int))
+                            {
+                                // Legacy primitive stat fields
+                                var value = Convert.ToSingle(field.GetValue(component));
+                                if (_statCollections.TryGetValue(gameObject, out var collection))
+                                {
+                                    collection.Set(statName, value);
+                                }
                             }
                         }
                     }
@@ -286,7 +329,15 @@ namespace StatForge
                 var component = gameObject.GetComponent(field.DeclaringType);
                 if (component != null)
                 {
-                    return Convert.ToSingle(field.GetValue(component));
+                    if (field.FieldType == typeof(Stat))
+                    {
+                        var stat = field.GetValue(component) as Stat;
+                        return stat?.Value ?? 0f;
+                    }
+                    else
+                    {
+                        return Convert.ToSingle(field.GetValue(component));
+                    }
                 }
             }
             
@@ -300,16 +351,25 @@ namespace StatForge
                 var component = gameObject.GetComponent(field.DeclaringType);
                 if (component != null)
                 {
-                    if (field.FieldType == typeof(float))
+                    if (field.FieldType == typeof(Stat))
+                    {
+                        var stat = field.GetValue(component) as Stat;
+                        if (stat != null)
+                        {
+                            stat.Value = value;
+                            return true;
+                        }
+                    }
+                    else if (field.FieldType == typeof(float))
                     {
                         field.SetValue(component, value);
+                        return true;
                     }
                     else if (field.FieldType == typeof(int))
                     {
                         field.SetValue(component, Mathf.RoundToInt(value));
+                        return true;
                     }
-                    
-                    return true;
                 }
             }
             
@@ -325,6 +385,73 @@ namespace StatForge
             _statCollections.Remove(gameObject);
             _fieldCache.Remove(gameObject);
         }
+        
+        #region Stat Object Extensions
+        
+        /// <summary>
+        /// Gets a Stat object by name from this GameObject's components.
+        /// </summary>
+        public static Stat GetStatObject(this MonoBehaviour behaviour, string statName)
+        {
+            return GetStatObject(behaviour.gameObject, statName);
+        }
+        
+        /// <summary>
+        /// Gets a Stat object by name from a GameObject's components.
+        /// </summary>
+        public static Stat GetStatObject(this GameObject gameObject, string statName)
+        {
+            if (!_fieldCache.TryGetValue(gameObject, out var fields) || !fields.TryGetValue(statName, out var field))
+                return null;
+            
+            if (field.FieldType != typeof(Stat))
+                return null;
+            
+            var component = gameObject.GetComponent(field.DeclaringType);
+            return component != null ? field.GetValue(component) as Stat : null;
+        }
+        
+        /// <summary>
+        /// Gets all Stat objects from this GameObject's components.
+        /// </summary>
+        public static IEnumerable<Stat> GetAllStatObjects(this MonoBehaviour behaviour)
+        {
+            return GetAllStatObjects(behaviour.gameObject);
+        }
+        
+        /// <summary>
+        /// Gets all Stat objects from a GameObject's components.
+        /// </summary>
+        public static IEnumerable<Stat> GetAllStatObjects(this GameObject gameObject)
+        {
+            var stats = new List<Stat>();
+            
+            if (!_fieldCache.TryGetValue(gameObject, out var fields))
+                return stats;
+            
+            var components = gameObject.GetComponents<MonoBehaviour>();
+            foreach (var component in components)
+            {
+                if (component == null) continue;
+                
+                foreach (var fieldEntry in fields)
+                {
+                    var field = fieldEntry.Value;
+                    if (field.FieldType == typeof(Stat) && field.DeclaringType == component.GetType())
+                    {
+                        var stat = field.GetValue(component) as Stat;
+                        if (stat != null)
+                        {
+                            stats.Add(stat);
+                        }
+                    }
+                }
+            }
+            
+            return stats;
+        }
+        
+        #endregion
     }
     
     /// <summary>
