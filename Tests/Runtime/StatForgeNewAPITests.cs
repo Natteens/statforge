@@ -308,6 +308,207 @@ namespace StatForge.Tests
         }
         
         #endregion
+        
+        #region Ultra-Simplified API Tests
+        
+        [Test]
+        public void Stat_OperatorOverloads_ArithmeticWork()
+        {
+            var stat = new Stat("Test", 100f);
+            
+            // Test arithmetic operators (these return float values)
+            float addResult = stat + 25f;
+            Assert.AreEqual(125f, addResult, 0.01f);
+            
+            float subtractResult = stat - 10f;
+            Assert.AreEqual(90f, subtractResult, 0.01f);
+            
+            float multiplyResult = stat * 2f;
+            Assert.AreEqual(200f, multiplyResult, 0.01f);
+            
+            float divideResult = stat / 4f;
+            Assert.AreEqual(25f, divideResult, 0.01f);
+        }
+        
+        [Test]
+        public void Stat_OperatorOverloads_ComparisonWork()
+        {
+            var stat = new Stat("Test", 100f);
+            
+            // Test comparison operators
+            Assert.IsTrue(stat > 50f);
+            Assert.IsFalse(stat < 50f);
+            Assert.IsTrue(stat >= 100f);
+            Assert.IsTrue(stat <= 100f);
+            Assert.IsTrue(stat == 100f);
+            Assert.IsFalse(stat != 100f);
+        }
+        
+        [Test]
+        public void Stat_OperatorOverloads_StatComparison()
+        {
+            var stat1 = new Stat("Test1", 100f);
+            var stat2 = new Stat("Test2", 50f);
+            var stat3 = new Stat("Test3", 100f);
+            
+            Assert.IsTrue(stat1 > stat2);
+            Assert.IsFalse(stat1 < stat2);
+            Assert.IsTrue(stat1 == stat3);
+            Assert.IsFalse(stat1 != stat3);
+        }
+        
+        [Test]
+        public void Stat_ImplicitConversions_Work()
+        {
+            var stat = new Stat("Test", 42.5f);
+            
+            // Test implicit conversion to float
+            float floatValue = stat;
+            Assert.AreEqual(42.5f, floatValue, 0.01f);
+            
+            // Test null stat conversion
+            Stat nullStat = null;
+            float nullValue = nullStat;
+            Assert.AreEqual(0f, nullValue, 0.01f);
+        }
+        
+        [Test]
+        public void Stat_EnhancedMethods_Work()
+        {
+            var stat = new Stat("Test", 50f, 0f, 100f);
+            
+            // Test convenience methods
+            stat.Add(25f);
+            Assert.AreEqual(75f, stat.Value, 0.01f);
+            
+            stat.Subtract(15f);
+            Assert.AreEqual(60f, stat.Value, 0.01f);
+            
+            stat.Multiply(2f);
+            Assert.AreEqual(100f, stat.Value, 0.01f); // Clamped to max
+            
+            // Test utility properties
+            Assert.IsTrue(stat.IsAtMax);
+            Assert.IsFalse(stat.IsEmpty);
+            Assert.AreEqual(1f, stat.Percentage, 0.01f);
+        }
+        
+        [Test]
+        public void Stat_BuffDebuff_Methods_Work()
+        {
+            var stat = new Stat("Test", 100f);
+            
+            var buff = stat.Buff(25f, 1f);
+            Assert.AreEqual(125f, stat.Value, 0.01f);
+            Assert.IsNotNull(buff);
+            
+            var debuff = stat.Debuff(15f, 1f);
+            Assert.AreEqual(110f, stat.Value, 0.01f); // 100 + 25 - 15
+            Assert.IsNotNull(debuff);
+        }
+        
+        [Test]
+        public void Stat_SerializationCallbacks_Work()
+        {
+            var stat = new Stat("Test", 100f);
+            
+            // Test serialization callbacks don't crash
+            stat.OnBeforeSerialize();
+            stat.OnAfterDeserialize();
+            
+            // Value should still be accessible
+            Assert.AreEqual(100f, stat.Value, 0.01f);
+        }
+        
+        [Test]
+        public void Stat_AutoInitialization_Works()
+        {
+            // Create a stat without explicit initialization
+            var stat = new Stat("AutoInit", 50f);
+            
+            // Accessing Value should trigger auto-initialization
+            float value = stat.Value;
+            Assert.AreEqual(50f, value, 0.01f);
+            
+            // Should be able to add modifiers
+            stat.AddTemporaryBonus(10f);
+            Assert.AreEqual(60f, stat.Value, 0.01f);
+        }
+        
+        [Test]
+        public void StatOperators_ExtensionMethods_Work()
+        {
+            var stat = new Stat("Test", 50f, 0f, 100f);
+            
+            // Test extension methods from StatOperators
+            stat.Fill();
+            Assert.AreEqual(100f, stat.Value, 0.01f);
+            
+            stat.Empty();
+            Assert.AreEqual(0f, stat.Value, 0.01f);
+            
+            stat.Value = 75f;
+            stat.TakeDamage(25f);
+            Assert.AreEqual(50f, stat.Value, 0.01f);
+            
+            stat.Heal(30f);
+            Assert.AreEqual(80f, stat.Value, 0.01f);
+            
+            Assert.IsTrue(stat.CanAfford(50f));
+            Assert.IsFalse(stat.CanAfford(100f));
+            
+            bool consumed = stat.Consume(30f);
+            Assert.IsTrue(consumed);
+            Assert.AreEqual(50f, stat.Value, 0.01f);
+        }
+        
+        [Test]
+        public void StatConversions_Work()
+        {
+            var stat = new Stat("Test", 42.7f, 0f, 100f);
+            
+            // Test conversion methods
+            Assert.AreEqual(42, stat.ToInt());
+            Assert.AreEqual(43, stat.ToIntRounded());
+            Assert.IsTrue(stat.ToBool());
+            
+            string percentage = stat.ToPercentageText();
+            Assert.AreEqual("43%", percentage);
+            
+            string fraction = stat.ToFractionText();
+            Assert.AreEqual("43/100", fraction);
+            
+            float normalized = stat.Normalize();
+            Assert.AreEqual(0.427f, normalized, 0.01f);
+        }
+        
+        [Test]
+        public void Stat_ZeroSetupUsage_Works()
+        {
+            // Test the "zero setup" promise - stats should work immediately
+            var health = new Stat("Health", 100f);
+            var mana = new Stat("Mana", 50f);
+            
+            // Should work immediately without any initialization
+            health.Value = 80f;
+            Assert.AreEqual(80f, health.Value, 0.01f);
+            
+            // Operators should work
+            bool isHealthy = health > 50f;
+            Assert.IsTrue(isHealthy);
+            
+            // Modifiers should work
+            mana.AddTemporaryBonus(25f);
+            Assert.AreEqual(75f, mana.Value, 0.01f);
+            
+            // Events should work
+            bool eventFired = false;
+            health.OnValueChanged += (old, newVal) => eventFired = true;
+            health.Value = 90f;
+            Assert.IsTrue(eventFired);
+        }
+        
+        #endregion
     }
     
     // Test component for testing [Stat] attributes with legacy API

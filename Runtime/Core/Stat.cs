@@ -10,7 +10,7 @@ namespace StatForge
     /// This is the core class for the new simplified StatForge API.
     /// </summary>
     [Serializable]
-    public class Stat
+    public class Stat : ISerializationCallbackReceiver
     {
         [SerializeField] private string _name;
         [SerializeField] private float _baseValue;
@@ -18,6 +18,7 @@ namespace StatForge
         [SerializeField] private float _minValue = 0f;
         [SerializeField] private float _maxValue = float.MaxValue;
         [SerializeField] private bool _allowModifiers = true;
+        [SerializeField] private string _definitionGuid; // Reference to global StatDefinition
         
         // Runtime data (not serialized)
         [NonSerialized] private List<IStatModifier> _modifiers = new List<IStatModifier>();
@@ -26,6 +27,8 @@ namespace StatForge
         [NonSerialized] private GameObject _owner;
         [NonSerialized] private StatCollection _parentCollection;
         [NonSerialized] private bool _isCalculating = false; // Prevent circular references
+        [NonSerialized] private StatDefinition _cachedDefinition; // Cached reference to definition
+        [NonSerialized] private bool _isInitialized = false;
         
         /// <summary>
         /// Event fired when this stat's value changes.
@@ -95,6 +98,8 @@ namespace StatForge
         {
             get
             {
+                EnsureInitialized();
+                
                 if (_isDirty || !_cachedValue.HasValue)
                 {
                     _cachedValue = CalculateValue();
@@ -159,6 +164,43 @@ namespace StatForge
         {
             get => _owner;
             internal set => _owner = value;
+        }
+        
+        /// <summary>
+        /// The StatDefinition this stat is based on (if any).
+        /// </summary>
+        public StatDefinition Definition
+        {
+            get => _cachedDefinition;
+            set => SetDefinition(value);
+        }
+        
+        #endregion
+        
+        #region Definition Management
+        
+        /// <summary>
+        /// Sets a StatDefinition for this stat and applies its configuration.
+        /// </summary>
+        public void SetDefinition(StatDefinition definition)
+        {
+            _cachedDefinition = definition;
+            
+            if (definition != null)
+            {
+#if UNITY_EDITOR
+                var path = UnityEditor.AssetDatabase.GetAssetPath(definition);
+                if (!string.IsNullOrEmpty(path))
+                {
+                    _definitionGuid = UnityEditor.AssetDatabase.AssetPathToGUID(path);
+                }
+#endif
+                ApplyDefinition(definition);
+            }
+            else
+            {
+                _definitionGuid = null;
+            }
         }
         
         #endregion
@@ -382,6 +424,7 @@ namespace StatForge
             if (_modifiers == null)
                 _modifiers = new List<IStatModifier>();
             _isDirty = true;
+            _isInitialized = true;
         }
         
         internal void SetParentCollection(StatCollection collection)
@@ -483,11 +526,323 @@ namespace StatForge
         }
         
         /// <summary>
+        /// Implicit conversion from float (creates new Stat).
+        /// </summary>
+        public static implicit operator Stat(float value)
+        {
+            return new Stat("AutoCreated", value);
+        }
+        
+        // Arithmetic operators
+        public static float operator +(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) + value;
+        }
+        
+        public static float operator +(float value, Stat stat)
+        {
+            return value + (stat?.Value ?? 0f);
+        }
+        
+        public static float operator -(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) - value;
+        }
+        
+        public static float operator -(float value, Stat stat)
+        {
+            return value - (stat?.Value ?? 0f);
+        }
+        
+        public static float operator *(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) * value;
+        }
+        
+        public static float operator *(float value, Stat stat)
+        {
+            return value * (stat?.Value ?? 0f);
+        }
+        
+        public static float operator /(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) / value;
+        }
+        
+        public static float operator /(float value, Stat stat)
+        {
+            return value / (stat?.Value ?? 0f);
+        }
+        
+        // Comparison operators
+        public static bool operator >(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) > value;
+        }
+        
+        public static bool operator <(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) < value;
+        }
+        
+        public static bool operator >=(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) >= value;
+        }
+        
+        public static bool operator <=(Stat stat, float value)
+        {
+            return (stat?.Value ?? 0f) <= value;
+        }
+        
+        public static bool operator ==(Stat stat, float value)
+        {
+            return Mathf.Approximately(stat?.Value ?? 0f, value);
+        }
+        
+        public static bool operator !=(Stat stat, float value)
+        {
+            return !Mathf.Approximately(stat?.Value ?? 0f, value);
+        }
+        
+        // Comparison with other stats
+        public static bool operator >(Stat stat1, Stat stat2)
+        {
+            return (stat1?.Value ?? 0f) > (stat2?.Value ?? 0f);
+        }
+        
+        public static bool operator <(Stat stat1, Stat stat2)
+        {
+            return (stat1?.Value ?? 0f) < (stat2?.Value ?? 0f);
+        }
+        
+        public static bool operator >=(Stat stat1, Stat stat2)
+        {
+            return (stat1?.Value ?? 0f) >= (stat2?.Value ?? 0f);
+        }
+        
+        public static bool operator <=(Stat stat1, Stat stat2)
+        {
+            return (stat1?.Value ?? 0f) <= (stat2?.Value ?? 0f);
+        }
+        
+        public static bool operator ==(Stat stat1, Stat stat2)
+        {
+            if (ReferenceEquals(stat1, stat2)) return true;
+            if (stat1 is null || stat2 is null) return false;
+            return Mathf.Approximately(stat1.Value, stat2.Value);
+        }
+        
+        public static bool operator !=(Stat stat1, Stat stat2)
+        {
+            return !(stat1 == stat2);
+        }
+        
+        /// <summary>
+        /// Override for equals to support operator overloads.
+        /// </summary>
+        public override bool Equals(object obj)
+        {
+            if (obj is Stat other)
+                return this == other;
+            if (obj is float floatValue)
+                return this == floatValue;
+            return false;
+        }
+        
+        /// <summary>
+        /// Override for GetHashCode to support operator overloads.
+        /// </summary>
+        public override int GetHashCode()
+        {
+            return _name?.GetHashCode() ?? 0;
+        }
+        
+        /// <summary>
         /// String representation for debugging.
         /// </summary>
         public override string ToString()
         {
             return $"{_name}: {Value:F2}" + (IsDerived ? $" (formula: {_formula})" : "");
+        }
+        
+        #endregion
+        
+        #region Enhanced API Methods
+        
+        /// <summary>
+        /// Adds a value directly to the base value (syntactic sugar for natural usage).
+        /// </summary>
+        public void Add(float value)
+        {
+            BaseValue += value;
+        }
+        
+        /// <summary>
+        /// Subtracts a value directly from the base value.
+        /// </summary>
+        public void Subtract(float value)
+        {
+            BaseValue -= value;
+        }
+        
+        /// <summary>
+        /// Multiplies the base value by a factor.
+        /// </summary>
+        public void Multiply(float factor)
+        {
+            BaseValue *= factor;
+        }
+        
+        /// <summary>
+        /// Divides the base value by a factor.
+        /// </summary>
+        public void Divide(float factor)
+        {
+            BaseValue /= factor;
+        }
+        
+        /// <summary>
+        /// Applies a temporary buff (positive modifier).
+        /// </summary>
+        public IStatModifier Buff(float amount, float duration = -1f)
+        {
+            return AddTemporaryBonus(amount, duration);
+        }
+        
+        /// <summary>
+        /// Applies a temporary debuff (negative modifier).
+        /// </summary>
+        public IStatModifier Debuff(float amount, float duration = -1f)
+        {
+            return AddTemporaryBonus(-amount, duration);
+        }
+        
+        /// <summary>
+        /// Checks if the stat value is zero or negative.
+        /// </summary>
+        public bool IsEmpty => Value <= 0f;
+        
+        /// <summary>
+        /// Checks if the stat value is at maximum.
+        /// </summary>
+        public bool IsAtMax => Mathf.Approximately(Value, MaxValue);
+        
+        /// <summary>
+        /// Checks if the stat value is at minimum.
+        /// </summary>
+        public bool IsAtMin => Mathf.Approximately(Value, MinValue);
+        
+        /// <summary>
+        /// Gets the percentage of current value relative to max value.
+        /// </summary>
+        public float Percentage => MaxValue > 0f ? Mathf.Clamp01(Value / MaxValue) : 0f;
+        
+        #endregion
+        
+        #region Serialization Callbacks
+        
+        /// <summary>
+        /// Called before Unity serializes this object.
+        /// </summary>
+        public void OnBeforeSerialize()
+        {
+            // Save current state if we have a definition
+            if (_cachedDefinition != null && string.IsNullOrEmpty(_definitionGuid))
+            {
+#if UNITY_EDITOR
+                var path = UnityEditor.AssetDatabase.GetAssetPath(_cachedDefinition);
+                if (!string.IsNullOrEmpty(path))
+                {
+                    _definitionGuid = UnityEditor.AssetDatabase.AssetPathToGUID(path);
+                }
+#endif
+            }
+        }
+        
+        /// <summary>
+        /// Called after Unity deserializes this object.
+        /// </summary>
+        public void OnAfterDeserialize()
+        {
+            // Ensure runtime initialization
+            EnsureInitialized();
+        }
+        
+        /// <summary>
+        /// Ensures the stat is properly initialized (lazy initialization).
+        /// </summary>
+        private void EnsureInitialized()
+        {
+            if (_isInitialized) return;
+            
+            InitializeRuntime();
+            
+            // Try to load definition from GUID if available
+            if (!string.IsNullOrEmpty(_definitionGuid) && _cachedDefinition == null)
+            {
+                LoadDefinitionFromGuid();
+            }
+            
+            _isInitialized = true;
+        }
+        
+        /// <summary>
+        /// Loads StatDefinition from GUID reference.
+        /// </summary>
+        private void LoadDefinitionFromGuid()
+        {
+            if (string.IsNullOrEmpty(_definitionGuid)) return;
+            
+#if UNITY_EDITOR
+            var path = UnityEditor.AssetDatabase.GUIDToAssetPath(_definitionGuid);
+            if (!string.IsNullOrEmpty(path))
+            {
+                _cachedDefinition = UnityEditor.AssetDatabase.LoadAssetAtPath<StatDefinition>(path);
+                if (_cachedDefinition != null)
+                {
+                    ApplyDefinition(_cachedDefinition);
+                }
+            }
+#else
+            // Runtime: Search through loaded StatDefinitions
+            var definitions = StatDefinition.GetAllDefinitions();
+            foreach (var def in definitions)
+            {
+                if (def != null && def.name == _name) // Fallback match by name
+                {
+                    _cachedDefinition = def;
+                    ApplyDefinition(_cachedDefinition);
+                    break;
+                }
+            }
+#endif
+        }
+        
+        /// <summary>
+        /// Applies a StatDefinition to this stat (if values aren't already customized).
+        /// </summary>
+        private void ApplyDefinition(StatDefinition definition)
+        {
+            if (definition == null) return;
+            
+            // Only apply if current values are default/unset
+            if (string.IsNullOrEmpty(_name) || _name == "NewStat")
+                _name = definition.StatName;
+            
+            if (string.IsNullOrEmpty(_formula))
+                _formula = definition.DefaultFormula;
+            
+            if (_minValue == 0f && _maxValue == float.MaxValue)
+            {
+                _minValue = definition.MinValue;
+                _maxValue = definition.MaxValue;
+            }
+            
+            if (_baseValue == 0f)
+                _baseValue = definition.DefaultBaseValue;
+            
+            _allowModifiers = definition.AllowModifiers;
         }
         
         #endregion
