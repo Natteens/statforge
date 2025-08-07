@@ -4,7 +4,7 @@ namespace StatForge
 {
     /// <summary>
     /// Simple attribute to mark fields as stats for automatic management.
-    /// Usage: [Stat] public float health = 100f;
+    /// Usage: [Stat] public float health = 100f; or [Stat] public Stat health = new Stat("Health", 100f);
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false)]
     public class StatAttribute : Attribute
