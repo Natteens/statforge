@@ -1,401 +1,279 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
 namespace StatForge
 {
-    [CreateAssetMenu(fileName = "New Stat Container", menuName = "Scriptable Objects/StatForge/Stat Container")]
-    public class StatContainer : ScriptableObject
+    [Serializable]
+    public class StatContainer
     {
-        [Header("Container Information")]
-        [SerializeField] private string containerName = "";
-        [SerializeField] private string description = "";
+        [SerializeField] private List<Stat> stats = new List<Stat>();
+        [SerializeField] private string containerName = "Default";
         
-        [Header("Stats Configuration")]
-        [SerializeField] private List<StatValue> stats;
+        private Dictionary<string, Stat> statsByName = new Dictionary<string, Stat>();
+        private Dictionary<string, Stat> statsByShort = new Dictionary<string, Stat>();
+        private Dictionary<Stat, List<Stat>> dependencies = new Dictionary<Stat, List<Stat>>();
+        private bool isInitialized = false;
+        private HashSet<string> initializingStats = new HashSet<string>(); // Prevent circular initialization
         
-        [Header("Auto-populate Settings")]
-        [SerializeField] private bool autoPopulatePrimary = true;
-        [SerializeField] private bool autoPopulateDerived = true;
-        [SerializeField] private bool autoPopulateExternal;
+        public string Name => containerName;
+        public IReadOnlyList<Stat> Stats => stats;
+        public int Count => stats.Count;
+        public bool IsEmpty => stats.Count == 0;
         
-        [Header("Container Category")]
-        [SerializeField] private ContainerCategory category = ContainerCategory.Base;
-
-       
-        private Dictionary<StatType, StatValue> statLookup;
-        private bool isInitialized;
+        public event Action<Stat, float, float> OnStatChanged;
+        public event Action<Stat> OnStatAdded;
+        public event Action<Stat> OnStatRemoved;
         
-        public string ContainerName 
-        { 
-            get => containerName; 
-            set => containerName = value; 
-        }
-        
-        public string Description 
-        { 
-            get => description; 
-            set => description = value; 
-        }
-        
-        public ContainerCategory Category 
-        { 
-            get => category; 
-            set => category = value; 
-        }
-        
-        public List<StatValue> Stats
+        public StatContainer(string name = "Default")
         {
-            get => stats;
-            set => stats = value;
+            containerName = name;
         }
-
-        public bool IsInitialized => isInitialized;
         
         public void Initialize()
         {
             if (isInitialized) return;
             
-            AutoPopulateStats();
-            RefreshLookup();
-            SubscribeToValueChanges();
-            RecalculateAllDerived();
+            statsByName.Clear();
+            statsByShort.Clear();
+            dependencies.Clear();
+            initializingStats.Clear();
             
-            isInitialized = true;
-        }
-        
-        private void AutoPopulateStats()
-        {
-            var allStatTypes = GetAllStatTypes();
-            
-            foreach (var statType in allStatTypes)
-            {
-                bool shouldInclude = false;
-                
-                switch (statType.Category)
-                {
-                    case StatCategory.Primary:
-                        shouldInclude = autoPopulatePrimary;
-                        break;
-                    case StatCategory.Derived:
-                        shouldInclude = autoPopulateDerived;
-                        break;
-                    case StatCategory.External:
-                        shouldInclude = autoPopulateExternal;
-                        break;
-                }
-                
-                if (shouldInclude && !HasStat(statType))
-                {
-                    AddStat(statType, statType.DefaultValue);
-                }
-            }
-        }
-        
-        private StatType[] GetAllStatTypes()
-        {
-#if UNITY_EDITOR
-            var guids = UnityEditor.AssetDatabase.FindAssets("t:StatType");
-            return guids.Select(guid => UnityEditor.AssetDatabase.LoadAssetAtPath<StatType>(UnityEditor.AssetDatabase.GUIDToAssetPath(guid)))
-                       .Where(stat => stat != null)
-                       .ToArray();
-#else
-            // static list ou Resources.LoadAll
-            return Resources.LoadAll<StatType>("");
-#endif
-        }
-        
-        public void ForceRecalculate()
-        {
-            isInitialized = false;
-            Initialize();
-        }
-        
-        private void RefreshLookup()
-        {
-            statLookup = stats.Where(s => s.statType != null)
-                .ToDictionary(s => s.statType, s => s);
-        }
-        
-        private void SubscribeToValueChanges()
-        {
+            // Register all stats first
             foreach (var stat in stats)
             {
-                stat.OnValueChanged -= OnStatValueChanged;
-                stat.OnValueChanged += OnStatValueChanged;
+                if (stat?.StatType == null) continue;
+                
+                stat.SetContainer(this);
+                stat.OnValueChanged += HandleStatChanged;
+                
+                RegisterStat(stat);
             }
+            
+            // Then build dependencies (safe operation)
+            BuildDependencies();
+            isInitialized = true;
+            
+            // Finally calculate values
+            RecalculateAllStats();
         }
         
-        public float GetStatValue(StatType statType)
+        private void RegisterStat(Stat stat)
         {
-            if (statType == null) return 0f;
+            var name = stat.StatType.DisplayName;
+            var shortName = stat.StatType.ShortName;
             
-            if (statLookup == null) RefreshLookup();
+            if (!string.IsNullOrEmpty(name))
+                statsByName[name] = stat;
+                
+            if (!string.IsNullOrEmpty(shortName))
+                statsByShort[shortName] = stat;
+        }
+        
+        private void BuildDependencies()
+        {
+            dependencies.Clear();
             
-            if (statLookup!.TryGetValue(statType, out var stat))
+            foreach (var stat in stats)
             {
-                if (statType.IsDerived)
+                if (stat.StatType?.HasFormula == true)
                 {
-                    return CalculateDerivedValue(statType, stat);
+                    var deps = FindStatDependencies(stat.StatType.Formula);
+                    dependencies[stat] = deps;
                 }
-                return stat.TotalValue;
             }
-            
-            return statType.DefaultValue;
         }
         
-        public void SetAllocatedPoints(StatType statType, float points)
+        private List<Stat> FindStatDependencies(string formula)
         {
-            if (statType == null || !statType.IsPrimary) return;
+            var deps = new List<Stat>();
+            if (string.IsNullOrEmpty(formula)) return deps;
             
-            var stat = GetOrCreateStat(statType);
+            try
+            {
+                var pattern = @"\b([A-Za-z][A-Za-z0-9_]*)\b";
+                var matches = System.Text.RegularExpressions.Regex.Matches(formula, pattern);
+                
+                foreach (System.Text.RegularExpressions.Match match in matches)
+                {
+                    var statName = match.Groups[1].Value;
+                    var foundStat = GetStatInternal(statName); // Use internal method to avoid circular calls
+                    if (foundStat != null && !deps.Contains(foundStat))
+                    {
+                        deps.Add(foundStat);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[StatForge] Error finding dependencies for formula '{formula}': {e.Message}");
+            }
+            
+            return deps;
+        }
+        
+        private Stat GetStatInternal(string nameOrShort)
+        {
+            if (statsByName.TryGetValue(nameOrShort, out var stat1))
+                return stat1;
+                
+            if (statsByShort.TryGetValue(nameOrShort, out var stat2))
+                return stat2;
+                
+            return null;
+        }
+        
+        public Stat GetStat(string nameOrShort)
+        {
+            if (!isInitialized) 
+            {
+                // Prevent circular initialization
+                if (initializingStats.Contains(nameOrShort))
+                {
+                    Debug.LogWarning($"[StatForge] Circular dependency detected for stat '{nameOrShort}'");
+                    return null;
+                }
+                
+                initializingStats.Add(nameOrShort);
+                Initialize();
+                initializingStats.Remove(nameOrShort);
+            }
+            
+            return GetStatInternal(nameOrShort);
+        }
+        
+        public float GetStatValue(string nameOrShort)
+        {
+            var stat = GetStatInternal(nameOrShort); // Use internal to avoid initialization loops
             if (stat != null)
             {
-                stat.SetAllocatedPoints(Mathf.Max(0f, points));
+                // For formulas, use base values + additive modifiers only to prevent recursion
+                return stat.BaseValue + stat.Modifiers
+                    .Where(m => m.Type == ModifierType.Additive)
+                    .Sum(m => m.Value);
             }
+            return 0f;
         }
         
-        public void SetBonusValue(StatType statType, float bonus)
+        public void AddStat(Stat stat)
         {
-            var stat = GetOrCreateStat(statType);
-            if (stat != null)
-            {
-                stat.SetBonusValue(bonus);
-            }
-        }
-        
-        public void SetBaseValue(StatType statType, float baseValue)
-        {
-            var stat = GetOrCreateStat(statType);
-            if (stat != null)
-            {
-                stat.SetBaseValue(baseValue);
-            }
-        }
-        
-        public StatValue GetStat(StatType statType)
-        {
-            if (statType == null) return null;
+            if (stat == null || stats.Contains(stat)) return;
             
-            if (statLookup == null) RefreshLookup();
-            return statLookup!.GetValueOrDefault(statType);
-        }
-        
-        public StatValue GetOrCreateStat(StatType statType)
-        {
-            if (statType == null) return null;
-            
-            var stat = GetStat(statType);
-            if (stat == null)
-            {
-                AddStat(statType, statType.DefaultValue);
-                stat = GetStat(statType);
-            }
-            
-            return stat;
-        }
-        
-        public void AddStat(StatType statType, float baseValue = 0f)
-        {
-            if (statType == null || stats.Any(s => s.statType == statType)) return;
-            
-            var newStat = new StatValue(statType, baseValue);
-            stats.Add(newStat);
+            stats.Add(stat);
             
             if (isInitialized)
             {
-                RefreshLookup();
-                newStat.OnValueChanged += OnStatValueChanged;
+                stat.SetContainer(this);
+                stat.OnValueChanged += HandleStatChanged;
+                RegisterStat(stat);
+                BuildDependencies();
+                RecalculateAllStats();
             }
+            
+            OnStatAdded?.Invoke(stat);
         }
         
-        public bool RemoveStat(StatType statType)
+        public Stat CreateStat(StatType statType, float baseValue = 0f)
         {
-            if (statType == null) return false;
+            var stat = new Stat(statType, baseValue);
+            AddStat(stat);
+            return stat;
+        }
+        
+        public bool RemoveStat(Stat stat)
+        {
+            if (stat == null || !stats.Remove(stat)) return false;
             
-            var stat = stats.FirstOrDefault(s => s.statType == statType);
-            if (stat != null)
+            stat.OnValueChanged -= HandleStatChanged;
+            
+            if (stat.StatType != null)
             {
-                stat.OnValueChanged -= OnStatValueChanged;
-                stats.Remove(stat);
-                
-                if (isInitialized)
-                {
-                    RefreshLookup();
-                }
-                return true;
+                statsByName.Remove(stat.StatType.DisplayName);
+                statsByShort.Remove(stat.StatType.ShortName);
             }
             
-            return false;
+            dependencies.Remove(stat);
+            BuildDependencies();
+            OnStatRemoved?.Invoke(stat);
+            
+            return true;
         }
         
-        private void OnStatValueChanged(StatValue changedStat)
+        public bool RemoveStat(string nameOrShort)
         {
-            if (!isInitialized) return;
-            
-            RecalculateDerivedStatsThatDependOn(changedStat.statType);
-        }
-        
-        private void RecalculateDerivedStatsThatDependOn(StatType changedStat)
-        {
-            var derivedStats = stats.Where(s => s.statType != null && s.statType.IsDerived);
-            
-            foreach (var stat in derivedStats)
-            {
-                if (StatDependsOn(stat.statType, changedStat))
-                {
-                    CalculateDerivedValue(stat.statType, stat);
-                }
-            }
-        }
-        
-        private bool StatDependsOn(StatType derivedStat, StatType dependency)
-        {
-            if (derivedStat.Dependencies != null && derivedStat.Dependencies.Contains(dependency))
-                return true;
-            
-            var referencedStats = FormulaEvaluator.ExtractStatReferences(derivedStat.Formula);
-            return referencedStats.Contains(dependency.ShortName);
-        }
-        
-        private void RecalculateAllDerived()
-        {
-            var derivedStats = stats.Where(s => s.statType != null && s.statType.IsDerived);
-            
-            foreach (var stat in derivedStats)
-            {
-                CalculateDerivedValue(stat.statType, stat);
-            }
-        }
-        
-        private float CalculateDerivedValue(StatType derivedStat, StatValue statValue)
-        {
-            if (!derivedStat.IsDerived || string.IsNullOrEmpty(derivedStat.Formula))
-                return statValue.TotalValue; 
-            
-            float formulaResult = FormulaEvaluator.Evaluate(derivedStat.Formula, this);
-            return formulaResult + statValue.baseValue + statValue.bonusValue;
-        }
-        
-        public static StatContainer Merge(params StatContainer[] containers)
-        {
-            if (containers == null || containers.Length == 0) return null;
-            
-            var merged = CreateInstance<StatContainer>();
-            merged.containerName = string.Join(" + ", containers.Select(c => c.ContainerName));
-            merged.stats = new List<StatValue>();
-            
-            var firstContainer = containers.FirstOrDefault(c => c != null);
-            if (firstContainer != null)
-            {
-                merged.autoPopulatePrimary = firstContainer.autoPopulatePrimary;
-                merged.autoPopulateDerived = firstContainer.autoPopulateDerived;
-                merged.autoPopulateExternal = firstContainer.autoPopulateExternal;
-            }
-            
-            var allStatTypes = new HashSet<StatType>();
-            
-            foreach (var container in containers.Where(c => c != null))
-            {
-                foreach (var stat in container.stats)
-                {
-                    if (stat.statType != null)
-                        allStatTypes.Add(stat.statType);
-                }
-            }
-            
-            foreach (var statType in allStatTypes)
-            {
-                float totalBase = 0f;
-                float totalBonus = 0f;
-                
-                foreach (var container in containers.Where(c => c != null))
-                {
-                    var stat = container.GetStat(statType);
-                    if (stat != null)
-                    {
-                        totalBase += stat.baseValue;
-                        totalBonus += stat.bonusValue;
-                    }
-                }
-                
-                var mergedStat = new StatValue(statType, totalBase);
-                mergedStat.SetBonusValue(totalBonus);
-                merged.stats.Add(mergedStat);
-            }
-            
-            merged.Initialize();
-            return merged;
-        }
-
-        private List<StatValue> GetStatsByCategory(StatCategory c)
-        {
-            return stats.Where(s => s.statType != null && s.statType.Category == c).ToList();
-        }
-        
-        public List<StatValue> GetPrimaryStats()
-        {
-            return GetStatsByCategory(StatCategory.Primary);
-        }
-        
-        public List<StatValue> GetDerivedStats()
-        {
-            return GetStatsByCategory(StatCategory.Derived);
-        }
-        
-        public List<StatValue> GetExternalStats()
-        {
-            return GetStatsByCategory(StatCategory.External);
-        }
-        
-        public bool HasStat(StatType statType)
-        {
-            return statType != null && stats.Any(s => s.statType == statType);
+            var stat = GetStatInternal(nameOrShort);
+            return stat != null && RemoveStat(stat);
         }
         
         public void ClearStats()
         {
-            foreach (var stat in stats)
+            var statsToRemove = stats.ToList();
+            foreach (var stat in statsToRemove)
             {
-                stat.OnValueChanged -= OnStatValueChanged;
+                RemoveStat(stat);
+            }
+        }
+        
+        public void NotifyStatChanged(Stat changedStat)
+        {
+            var dependentStats = new List<Stat>();
+            
+            foreach (var kvp in dependencies)
+            {
+                if (kvp.Value.Contains(changedStat))
+                {
+                    dependentStats.Add(kvp.Key);
+                }
             }
             
-            stats.Clear();
-            statLookup?.Clear();
-        }
-        
-        public void SetAutoPopulateSettings(bool primary, bool derived, bool external)
-        {
-            autoPopulatePrimary = primary;
-            autoPopulateDerived = derived;
-            autoPopulateExternal = external;
-            
-            if (isInitialized)
+            foreach (var dependent in dependentStats)
             {
-                AutoPopulateStats();
-                RefreshLookup();
+                dependent.ForceRecalculate();
             }
         }
         
-        private void OnDestroy()
+        private void RecalculateAllStats()
+        {
+            // First stats without formulas
+            foreach (var stat in stats.Where(s => !s.StatType?.HasFormula == true))
+            {
+                stat.ForceRecalculate();
+            }
+            
+            // Then stats with formulas
+            foreach (var stat in stats.Where(s => s.StatType?.HasFormula == true))
+            {
+                stat.ForceRecalculate();
+            }
+        }
+        
+        private void HandleStatChanged(Stat stat, float oldValue, float newValue)
+        {
+            OnStatChanged?.Invoke(stat, oldValue, newValue);
+        }
+        
+        public IEnumerable<Stat> GetStatsByCategory(string category)
+        {
+            return stats.Where(s => s.StatType?.Category == category);
+        }
+        
+        public IEnumerable<Stat> GetStatsWithFormula()
+        {
+            return stats.Where(s => s.StatType?.HasFormula == true);
+        }
+        
+        public void Update(float deltaTime)
         {
             foreach (var stat in stats)
             {
-                stat.OnValueChanged -= OnStatValueChanged;
+                stat.ForceRecalculate();
             }
         }
         
-        private void OnValidate()
+        public override string ToString()
         {
-            if (string.IsNullOrEmpty(containerName))
-                containerName = name;
-                
-            RemoveNullStats();
-        }
-        
-        private void RemoveNullStats()
-        {
-            stats.RemoveAll(s => s == null || s.statType == null);
+            return $"{containerName} ({stats.Count} stats)";
         }
     }
 }

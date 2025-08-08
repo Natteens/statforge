@@ -1,0 +1,77 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace StatForge
+{
+    [CreateAssetMenu(fileName = "New Stat Container", menuName = "StatForge/Stat Container")]
+    public class StatContainerAsset : ScriptableObject
+    {
+        [Header("Container Configuration")]
+        [SerializeField] private string containerName = "New Container";
+        [SerializeField] private List<StatType> statTypes = new List<StatType>();
+        
+        [Header("Description")]
+        [TextArea(3, 5)]
+        [SerializeField] private string description = "";
+        
+        public string ContainerName 
+        { 
+            get => string.IsNullOrEmpty(containerName) ? name : containerName;
+            set => containerName = value;
+        }
+        
+        public List<StatType> StatTypes => statTypes;
+        public string Description { get => description; set => description = value; }
+        
+        /// <summary>
+        /// Creates a runtime StatContainer based on this asset
+        /// </summary>
+        public StatContainer CreateRuntimeContainer()
+        {
+            var container = new StatContainer(ContainerName);
+            
+            foreach (var statType in statTypes)
+            {
+                if (statType != null)
+                {
+                    var stat = new Stat(statType, statType.DefaultValue);
+                    container.AddStat(stat);
+                }
+            }
+            
+            container.Initialize();
+            return container;
+        }
+        
+        /// <summary>
+        /// Populates an existing StatContainer with the stats from this asset
+        /// </summary>
+        public void PopulateContainer(StatContainer container)
+        {
+            container.ClearStats();
+            
+            foreach (var statType in statTypes)
+            {
+                if (statType != null)
+                {
+                    var stat = new Stat(statType, statType.DefaultValue);
+                    container.AddStat(stat);
+                }
+            }
+            
+            container.Initialize();
+        }
+        
+        private void OnValidate()
+        {
+            // Remove nulls from list
+            for (int i = statTypes.Count - 1; i >= 0; i--)
+            {
+                if (statTypes[i] == null)
+                {
+                    statTypes.RemoveAt(i);
+                }
+            }
+        }
+    }
+}
