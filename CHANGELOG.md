@@ -1,3 +1,10 @@
+## [0.2.3](https://github.com/Natteens/statforge/compare/v0.2.2...v0.2.3) (2025-08-08)
+
+
+### Bug Fixes
+
+* Refactor editor and runtime stat system ([1aa44d5](https://github.com/Natteens/statforge/commit/1aa44d58b353789234142ed582f7ee4584546ace))
+
 ## [0.2.2](https://github.com/Natteens/statforge/compare/v0.2.1...v0.2.2) (2025-07-28)
 
 
