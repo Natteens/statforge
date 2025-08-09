@@ -23,9 +23,6 @@ namespace StatForge
         public List<StatType> StatTypes => statTypes;
         public string Description { get => description; set => description = value; }
         
-        /// <summary>
-        /// Creates a runtime StatContainer based on this asset
-        /// </summary>
         public StatContainer CreateRuntimeContainer()
         {
             var container = new StatContainer(ContainerName);
@@ -43,9 +40,6 @@ namespace StatForge
             return container;
         }
         
-        /// <summary>
-        /// Populates an existing StatContainer with the stats from this asset
-        /// </summary>
         public void PopulateContainer(StatContainer container)
         {
             container.ClearStats();
@@ -64,7 +58,6 @@ namespace StatForge
         
         private void OnValidate()
         {
-            // Remove nulls from list
             for (int i = statTypes.Count - 1; i >= 0; i--)
             {
                 if (statTypes[i] == null)

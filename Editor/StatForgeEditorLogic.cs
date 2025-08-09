@@ -65,6 +65,7 @@ namespace StatForge.Editor
             data.CurrentEdit = EditMode.CreateStat;
             data.IsCreatingNew = true;
             data.ResetStatEditor();
+            data.SelectedStat = null; 
         }
 
         public void StartEditStat(StatType stat)
@@ -72,7 +73,25 @@ namespace StatForge.Editor
             data.CurrentEdit = EditMode.EditStat;
             data.IsCreatingNew = false;
             data.EditingStatType = stat;
+            data.SelectedStat = null; 
             LoadStatToEditor(stat);
+        }
+
+        public void DuplicateStat(StatType originalStat)
+        {
+            data.CurrentEdit = EditMode.CreateStat;
+            data.IsCreatingNew = true;
+            data.SelectedStat = null;
+            
+            data.NewStatName = $"{originalStat.DisplayName} Copy";
+            data.NewStatShortName = $"{originalStat.ShortName}C";
+            data.NewStatCategory = originalStat.Category;
+            data.NewStatValueType = originalStat.ValueType;
+            data.NewStatFormula = originalStat.Formula;
+            data.NewStatDescription = originalStat.Description;
+            data.NewStatDefault = originalStat.DefaultValue;
+            data.NewStatMin = originalStat.MinValue;
+            data.NewStatMax = originalStat.MaxValue;
         }
 
         private void LoadStatToEditor(StatType stat)
@@ -80,6 +99,7 @@ namespace StatForge.Editor
             data.NewStatName = stat.DisplayName;
             data.NewStatShortName = stat.ShortName;
             data.NewStatCategory = stat.Category;
+            data.NewStatValueType = stat.ValueType;
             data.NewStatFormula = stat.Formula;
             data.NewStatDescription = stat.Description;
             data.NewStatDefault = stat.DefaultValue;
@@ -116,19 +136,24 @@ namespace StatForge.Editor
             stat.DisplayName = data.NewStatName;
             stat.ShortName = data.NewStatShortName;
             stat.Category = data.NewStatCategory;
+            stat.ValueType = data.NewStatValueType;
             stat.Formula = data.NewStatFormula;
             stat.Description = data.NewStatDescription;
             stat.DefaultValue = data.NewStatDefault;
-            stat.MinValue = data.NewStatMin;
-            stat.MaxValue = data.NewStatMax;
+            
+            if (data.NewStatValueType == StatValueType.Percentage)
+            {
+                stat.MinValue = data.NewStatMin;
+                stat.MaxValue = data.NewStatMax;
+            }
+
+            stat.AutoAdjustRangeForType();
 
             EditorUtility.SetDirty(stat);
             AssetDatabase.SaveAssets();
 
             CancelEdit();
             RefreshAll();
-
-            Debug.Log($"[StatForge] Stat '{data.NewStatName}' saved successfully!");
         }
 
         public void DeleteStat(StatType stat)
@@ -140,7 +165,6 @@ namespace StatForge.Editor
                 data.SelectedStat = null;
 
             RefreshAll();
-            Debug.Log($"[StatForge] Stat '{stat.DisplayName}' deleted!");
         }
 
         public void StartCreateContainer()
@@ -148,6 +172,7 @@ namespace StatForge.Editor
             data.CurrentEdit = EditMode.CreateContainer;
             data.IsCreatingNew = true;
             data.ResetContainerEditor();
+            data.SelectedContainer = null;
         }
 
         public void StartEditContainer(StatContainerAsset container)
@@ -155,6 +180,7 @@ namespace StatForge.Editor
             data.CurrentEdit = EditMode.EditContainer;
             data.IsCreatingNew = false;
             data.EditingContainer = container;
+            data.SelectedContainer = null; 
             LoadContainerToEditor(container);
         }
 
@@ -206,8 +232,6 @@ namespace StatForge.Editor
             EditorUtility.SetDirty(container);
             AssetDatabase.SaveAssets();
 
-            Debug.Log($"[StatForge] Container '{data.NewContainerName}' saved with {data.SelectedStats.Count} stats!");
-
             CancelEdit();
             RefreshAll();
         }
@@ -221,7 +245,6 @@ namespace StatForge.Editor
                 data.SelectedContainer = null;
 
             RefreshAll();
-            Debug.Log($"[StatForge] Container '{container.ContainerName}' deleted!");
         }
 
         public void CancelEdit()
@@ -229,64 +252,67 @@ namespace StatForge.Editor
             data.Reset();
         }
 
-        public void CreateRPGTemplate()
+        public void ValidateAllStats()
         {
-            CreateTemplateStats(new[]
+            var issues = new List<string>();
+            var stats = data.AllStatTypes;
+            
+            foreach (var stat in stats)
             {
-                ("Constitution", "CON", "Attribute", 10f, 1f, 50f, ""),
-                ("Strength", "STR", "Attribute", 10f, 1f, 50f, ""),
-                ("Dexterity", "DEX", "Attribute", 10f, 1f, 50f, ""),
-                ("Intelligence", "INT", "Attribute", 10f, 1f, 50f, ""),
-                ("Health Points", "HP", "Combat", 100f, 1f, 999f, ""),
-                ("Mana Points", "MP", "Combat", 50f, 0f, 999f, ""),
-                ("Max Health", "MaxHP", "Derived", 100f, 1f, 9999f, "CON * 10 + STR * 2"),
-                ("Max Mana", "MaxMP", "Derived", 50f, 1f, 9999f, "INT * 5")
-            });
-
-            Debug.Log("[StatForge] RPG Basic template created successfully!");
-            RefreshAll();
-        }
-
-        public void CreateActionTemplate()
-        {
-            CreateTemplateStats(new[]
-            {
-                ("Health", "HP", "Core", 100f, 1f, 200f, ""),
-                ("Armor", "ARM", "Core", 50f, 0f, 100f, ""),
-                ("Damage", "DMG", "Core", 25f, 1f, 100f, ""),
-                ("Speed", "SPD", "Core", 100f, 1f, 200f, "")
-            });
-
-            Debug.Log("[StatForge] Action Game template created successfully!");
-            RefreshAll();
-        }
-
-        private void CreateTemplateStats(
-            (string name, string shortName, string category, float defaultVal, float min, float max, string formula)[]
-                statsData)
-        {
-            foreach (var statData in statsData)
-            {
-                var fileName = statData.name.Replace(" ", "").Replace("/", "_");
-                var path = $"{STATS_PATH}/{fileName}.asset";
-
-                if (File.Exists(path)) continue;
-
-                var stat = ScriptableObject.CreateInstance<StatType>();
-                stat.DisplayName = statData.name;
-                stat.ShortName = statData.shortName;
-                stat.Category = statData.category;
-                stat.DefaultValue = statData.defaultVal;
-                stat.MinValue = statData.min;
-                stat.MaxValue = statData.max;
-                stat.Formula = statData.formula;
-                stat.Description = $"Template stat for {statData.name}";
-
-                AssetDatabase.CreateAsset(stat, path);
+                if (string.IsNullOrEmpty(stat.DisplayName))
+                    issues.Add($"Stat '{stat.name}' has no display name");
+                    
+                if (string.IsNullOrEmpty(stat.ShortName))
+                    issues.Add($"Stat '{stat.DisplayName}' has no short name");
+                    
+                if (stat.HasFormula && string.IsNullOrEmpty(stat.Formula))
+                    issues.Add($"Stat '{stat.DisplayName}' has empty formula");
+                    
+                if (stat.ValueType == StatValueType.Percentage)
+                {
+                    if (stat.MinValue > stat.MaxValue)
+                        issues.Add($"Stat '{stat.DisplayName}' has min > max");
+                        
+                    if (stat.DefaultValue < stat.MinValue || stat.DefaultValue > stat.MaxValue)
+                        issues.Add($"Stat '{stat.DisplayName}' default value outside range");
+                }
             }
+            
+            var duplicateNames = stats.GroupBy(s => s.DisplayName).Where(g => g.Count() > 1);
+            foreach (var group in duplicateNames)
+            {
+                issues.Add($"Duplicate display name: '{group.Key}'");
+            }
+            
+            var duplicateShorts = stats.GroupBy(s => s.ShortName).Where(g => g.Count() > 1 && !string.IsNullOrEmpty(g.Key));
+            foreach (var group in duplicateShorts)
+            {
+                issues.Add($"Duplicate short name: '{group.Key}'");
+            }
+            
+            if (issues.Count == 0)
+            {
+                EditorUtility.DisplayDialog("Validation Complete", "All stats are valid! No issues found.", "OK");
+            }
+            else
+            {
+                var message = "Found validation issues:\n\n" + string.Join("\n", issues);
+                EditorUtility.DisplayDialog("Validation Issues", message, "OK");
+            }
+        }
 
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
+        public string GenerateShortName(string displayName)
+        {
+            if (string.IsNullOrEmpty(displayName)) return "";
+
+            var words = displayName.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+            var result = "";
+
+            foreach (var word in words)
+                if (word.Length > 0)
+                    result += word[0].ToString().ToUpper();
+
+            return result.Length > 4 ? result.Substring(0, 4) : result;
         }
 
         public List<GameObject> FindEntitiesWithStats()
@@ -333,12 +359,10 @@ namespace StatForge.Editor
         {
             if (!Application.isPlaying)
             {
-                Debug.Log("[StatForge] Refresh only works in runtime!");
                 return;
             }
 
             var entities = FindEntitiesWithStats();
-            var count = 0;
 
             foreach (var entity in entities)
             {
@@ -355,24 +379,8 @@ namespace StatForge.Editor
                         {
                             var stat = field.GetValue(component) as Stat;
                             stat?.ForceRecalculate();
-                            count++;
                         }
                 }
-            }
-
-            Debug.Log($"[StatForge] {count} stats updated!");
-        }
-
-        public void LogPerformanceStats()
-        {
-            Debug.Log($"[StatForge] StatType Assets: {data.AllStatTypes.Count}");
-            Debug.Log($"[StatForge] Container Assets: {data.AllContainers.Count}");
-            Debug.Log($"[StatForge] Categories: {data.AllCategories.Length - 1}");
-
-            if (Application.isPlaying)
-            {
-                var entities = FindEntitiesWithStats();
-                Debug.Log($"[StatForge] Runtime Entities: {entities.Count}");
             }
         }
     }

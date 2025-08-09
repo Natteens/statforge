@@ -2,10 +2,9 @@
     "name": "StatForge.Tests",
     "rootNamespace": "StatForge.Tests",
     "references": [
-        "GUID:27619889b8ba8c24980f49ee34dbb44a",
-        "GUID:0acc523941302664db1f4e527237feb3",
         "GUID:7f63ca224c41e2549adc7aeaf2692cca",
-        "GUID:4d3b3b6b55027b349af91bb4e5be4638"
+        "GUID:0acc523941302664db1f4e527237feb3",
+        "GUID:27619889b8ba8c24980f49ee34dbb44a"
     ],
     "includePlatforms": [
         "Editor"

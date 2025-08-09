@@ -17,11 +17,9 @@ namespace StatForge.Editor
 
             var rect = new Rect(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
 
-            // Label
             EditorGUI.LabelField(rect, label.text, EditorStyles.boldLabel);
             rect.y += EditorGUIUtility.singleLineHeight + 2;
 
-            // StatType e Value na mesma linha
             var statTypeRect = new Rect(rect.x, rect.y, rect.width * 0.65f, rect.height);
             var valueRect = new Rect(rect.x + rect.width * 0.67f, rect.y, rect.width * 0.33f, rect.height);
 
@@ -30,10 +28,6 @@ namespace StatForge.Editor
             if (statTypeProperty.objectReferenceValue != null)
             {
                 var statType = statTypeProperty.objectReferenceValue as StatType;
-
-                // Auto-preencher valor padrão
-                if (baseValueProperty.floatValue == 0f && statType.DefaultValue != 0f)
-                    baseValueProperty.floatValue = statType.DefaultValue;
 
                 EditorGUI.PropertyField(valueRect, baseValueProperty, GUIContent.none);
 
@@ -49,7 +43,14 @@ namespace StatForge.Editor
                         {
                             normal = { textColor = new Color(0.2f, 0.7f, 0.2f) }
                         };
-                        EditorGUI.LabelField(rect, $"Runtime: {stat.Value:F1} | {statType.ShortName}", infoStyle);
+                        
+                        var displayText = $"Runtime: {stat.FormattedValue}";
+                        if (stat.HasModifiers)
+                        {
+                            displayText += $" ({stat.Modifiers.Count} mods)";
+                        }
+                        
+                        EditorGUI.LabelField(rect, displayText, infoStyle);
                     }
                 }
                 else
@@ -58,8 +59,11 @@ namespace StatForge.Editor
                     {
                         normal = { textColor = Color.gray }
                     };
-                    var infoText = $"{statType.ShortName} | {baseValueProperty.floatValue:F1}";
+                    
+                    var formattedValue = statType.FormatValue(baseValueProperty.floatValue);
+                    var infoText = $"{statType.ShortName} | {formattedValue}";
                     if (statType.HasFormula) infoText += " + formula";
+                    
                     EditorGUI.LabelField(rect, infoText, infoStyle);
                 }
             }

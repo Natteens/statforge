@@ -11,6 +11,8 @@ namespace StatForge
         private List<Stat> allStats;
         private Dictionary<Stat, List<Stat>> dependencies;
         
+        private static readonly Dictionary<System.Type, System.Reflection.FieldInfo[]> fieldCache = new();
+        
         public StatRegistry(object owner)
         {
             this.owner = owner;
@@ -24,10 +26,7 @@ namespace StatForge
             allStats = new List<Stat>();
             dependencies = new Dictionary<Stat, List<Stat>>();
             
-            var fields = owner.GetType().GetFields(
-                System.Reflection.BindingFlags.Public | 
-                System.Reflection.BindingFlags.NonPublic | 
-                System.Reflection.BindingFlags.Instance);
+            var fields = GetCachedFields(owner.GetType());
             
             foreach (var field in fields)
             {
@@ -53,6 +52,19 @@ namespace StatForge
             }
             
             BuildDependencies();
+        }
+        
+        public static System.Reflection.FieldInfo[] GetCachedFields(System.Type type)
+        {
+            if (!fieldCache.TryGetValue(type, out var fields))
+            {
+                fields = type.GetFields(
+                    System.Reflection.BindingFlags.Public | 
+                    System.Reflection.BindingFlags.NonPublic | 
+                    System.Reflection.BindingFlags.Instance);
+                fieldCache[type] = fields;
+            }
+            return fields;
         }
         
         private void BuildDependencies()
@@ -109,9 +121,7 @@ namespace StatForge
             var stat = GetStat(nameOrShort);
             if (stat != null)
             {
-                return stat.BaseValue + stat.Modifiers
-                    .Where(m => m.Type == ModifierType.Additive)
-                    .Sum(m => m.Value);
+                return stat.Value;
             }
             return 0f;
         }
@@ -146,5 +156,7 @@ namespace StatForge
                 stat.ForceRecalculate();
             }
         }
+        
+        public static void ClearFieldCache() => fieldCache.Clear();
     }
 }

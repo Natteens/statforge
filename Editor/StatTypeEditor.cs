@@ -14,48 +14,78 @@ namespace StatForge.Editor
 
             EditorGUILayout.Space(5);
 
-            EditorGUILayout.LabelField("Informações Básicas", EditorStyles.boldLabel);
-            statType.DisplayName = EditorGUILayout.TextField("Nome", statType.DisplayName);
+            EditorGUILayout.LabelField("Basic Information", EditorStyles.boldLabel);
+            statType.DisplayName = EditorGUILayout.TextField("Name", statType.DisplayName);
 
             EditorGUILayout.BeginHorizontal();
-            statType.ShortName = EditorGUILayout.TextField("Abreviação", statType.ShortName);
+            statType.ShortName = EditorGUILayout.TextField("Short Name", statType.ShortName);
             if (GUILayout.Button("Auto", GUILayout.Width(50)))
             {
                 statType.ShortName = GenerateShortName(statType.DisplayName);
                 EditorUtility.SetDirty(statType);
             }
-
             EditorGUILayout.EndHorizontal();
 
-            statType.Category = EditorGUILayout.TextField("Categoria", statType.Category);
+            statType.Category = EditorGUILayout.TextField("Category", statType.Category);
+
+            EditorGUILayout.Space(5);
+
+            EditorGUILayout.LabelField("Value Type", EditorStyles.boldLabel);
+            var oldValueType = statType.ValueType;
+            statType.ValueType = (StatValueType)EditorGUILayout.EnumPopup("Type", statType.ValueType);
+
+            if (oldValueType != statType.ValueType)
+            {
+                statType.AutoAdjustRangeForType();
+                EditorUtility.SetDirty(statType);
+            }
+
+            var previewStyle = new GUIStyle(EditorStyles.helpBox);
+            EditorGUILayout.BeginVertical(previewStyle);
+            EditorGUILayout.LabelField("Preview:", EditorStyles.miniLabel);
+            var exampleValue = statType.ValueType == StatValueType.Percentage ? 25.5f : 150.75f;
+            EditorGUILayout.LabelField($"Example: {statType.FormatValue(exampleValue)}", EditorStyles.boldLabel);
+            EditorGUILayout.EndVertical();
 
             EditorGUILayout.Space(10);
 
-            EditorGUILayout.LabelField("Configuração de Valores", EditorStyles.boldLabel);
-            statType.DefaultValue = EditorGUILayout.FloatField("Valor Padrão", statType.DefaultValue);
+            EditorGUILayout.LabelField("Value Configuration", EditorStyles.boldLabel);
+            statType.DefaultValue = EditorGUILayout.FloatField("Default Value", statType.DefaultValue);
 
-            // Layout corrigido para Min e Max
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Mínimo", GUILayout.Width(60));
-            statType.MinValue = EditorGUILayout.FloatField(statType.MinValue, GUILayout.Width(80));
+            if (statType.ValueType == StatValueType.Percentage)
+            {
+                EditorGUILayout.Space(5);
+                EditorGUILayout.LabelField("Percentage Limits", EditorStyles.boldLabel);
+                
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Minimum", GUILayout.Width(60));
+                statType.MinValue = EditorGUILayout.FloatField(statType.MinValue, GUILayout.Width(80));
 
-            GUILayout.Space(20);
+                GUILayout.Space(20);
 
-            EditorGUILayout.LabelField("Máximo", GUILayout.Width(60));
-            statType.MaxValue = EditorGUILayout.FloatField(statType.MaxValue, GUILayout.Width(80));
+                EditorGUILayout.LabelField("Maximum", GUILayout.Width(60));
+                statType.MaxValue = EditorGUILayout.FloatField(statType.MaxValue, GUILayout.Width(80));
 
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.EndHorizontal();
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
+
+                if (GUILayout.Button("Reset to 0-100%"))
+                {
+                    statType.MinValue = 0f;
+                    statType.MaxValue = 100f;
+                    EditorUtility.SetDirty(statType);
+                }
+            }
 
             EditorGUILayout.Space(10);
 
-            EditorGUILayout.LabelField("Fórmula (Opcional)", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Use abreviações (ex: CON * 15 + STR * 2)", EditorStyles.miniLabel);
+            EditorGUILayout.LabelField("Formula (Optional)", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Use abbreviations (e.g. CON * 15 + STR * 2)", EditorStyles.miniLabel);
             statType.Formula = EditorGUILayout.TextArea(statType.Formula, GUILayout.Height(60));
 
             EditorGUILayout.Space(10);
 
-            EditorGUILayout.LabelField("Descrição", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Description", EditorStyles.boldLabel);
             statType.Description = EditorGUILayout.TextArea(statType.Description, GUILayout.Height(80));
 
             if (GUI.changed) EditorUtility.SetDirty(statType);

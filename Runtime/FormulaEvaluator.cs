@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
@@ -6,6 +7,10 @@ namespace StatForge
 {
     public static class FormulaEvaluator
     {
+        private static readonly Regex variablePattern = new(@"\b([A-Za-z][A-Za-z0-9_]*)\b", RegexOptions.Compiled);
+        private static readonly Regex multDivPattern = new(@"(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*([*/])\s*(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)", RegexOptions.Compiled);
+        private static readonly Regex addSubPattern = new(@"(\d+(?:\.\d+)?)\s*([+-])\s*(\d+(?:\.\d+)?)", RegexOptions.Compiled);
+        
         internal static float Evaluate(string formula, StatRegistry registry)
         {
             if (string.IsNullOrEmpty(formula) || registry == null)
@@ -40,11 +45,26 @@ namespace StatForge
             }
         }
         
+        public static float EvaluateGlobal(string formula, string ownerPrefix, Dictionary<string, Stat> globalStats)
+        {
+            if (string.IsNullOrEmpty(formula) || globalStats == null)
+                return 0f;
+            
+            try
+            {
+                var processedFormula = ProcessFormulaGlobal(formula, ownerPrefix, globalStats);
+                return EvaluateMathExpression(processedFormula);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[StatForge] Erro na fórmula global '{formula}': {e.Message}");
+                return 0f;
+            }
+        }
+        
         private static string ProcessFormula(string formula, StatRegistry registry)
         {
-            var pattern = @"\b([A-Za-z][A-Za-z0-9_]*)\b";
-            
-            return Regex.Replace(formula, pattern, match =>
+            return variablePattern.Replace(formula, match =>
             {
                 var statName = match.Groups[1].Value;
                 var value = registry.GetStatValue(statName);
@@ -54,9 +74,7 @@ namespace StatForge
         
         private static string ProcessFormula(string formula, StatContainer container)
         {
-            var pattern = @"\b([A-Za-z][A-Za-z0-9_]*)\b";
-            
-            return Regex.Replace(formula, pattern, match =>
+            return variablePattern.Replace(formula, match =>
             {
                 var statName = match.Groups[1].Value;
                 var value = container.GetStatValue(statName);
@@ -64,7 +82,33 @@ namespace StatForge
             });
         }
         
-        private static float EvaluateMathExpression(string expression)
+        private static string ProcessFormulaGlobal(string formula, string ownerPrefix, Dictionary<string, Stat> globalStats)
+        {
+            return variablePattern.Replace(formula, match =>
+            {
+                var statName = match.Groups[1].Value;
+                var value = GetGlobalStatValue(statName, ownerPrefix, globalStats);
+                return value.ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
+            });
+        }
+        
+        private static float GetGlobalStatValue(string nameOrShort, string ownerPrefix, Dictionary<string, Stat> globalStats)
+        {
+            var prefixedKey = $"{ownerPrefix}_{nameOrShort}";
+            if (globalStats.TryGetValue(prefixedKey, out var stat))
+            {
+                return stat.BaseValue; 
+            }
+            
+            if (globalStats.TryGetValue(nameOrShort, out var globalStat))
+            {
+                return globalStat.BaseValue;
+            }
+            
+            return 0f;
+        }
+        
+        public static float EvaluateMathExpression(string expression)
         {
             try
             {
@@ -95,17 +139,14 @@ namespace StatForge
             }
             
             expr = ProcessMultiplicationDivision(expr);
-            
             return ProcessAdditionSubtraction(expr);
         }
         
         private static string ProcessMultiplicationDivision(string expr)
         {
-            var pattern = @"(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*([*/])\s*(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)";
-            
-            while (Regex.IsMatch(expr, pattern))
+            while (multDivPattern.IsMatch(expr))
             {
-                expr = Regex.Replace(expr, pattern, match =>
+                expr = multDivPattern.Replace(expr, match =>
                 {
                     var leftStr = match.Groups[1].Value;
                     var op = match.Groups[2].Value;
@@ -128,7 +169,7 @@ namespace StatForge
         
         private static float ProcessAdditionSubtraction(string expr)
         {
-            var tokens = new System.Collections.Generic.List<string>();
+            var tokens = new List<string>();
             var currentToken = "";
             var isNegative = false;
             

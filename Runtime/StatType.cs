@@ -1,27 +1,31 @@
 using UnityEngine;
+using System.Globalization;
 
 namespace StatForge
 {
     [CreateAssetMenu(fileName = "New Stat", menuName = "StatForge/Stat Type")]
     public class StatType : ScriptableObject
     {
-        [Header("Informações Básicas")]
-        [SerializeField] private string displayName = "";
+        [Header("Basic Information")]
+        [SerializeField] private string displayName;
         [SerializeField] private string shortName = "";
         [SerializeField] private string category = "General";
+        [SerializeField] private StatValueType valueType = StatValueType.Normal;
         
-        [Header("Configuração de Valores")]
-        [SerializeField] private float defaultValue = 0f;
-        [SerializeField] private float minValue = 0f;
-        [SerializeField] private float maxValue = 100000f;
+        [Header("Value Configuration")]
+        [SerializeField] private float defaultValue;
         
-        [Header("Fórmula (Opcional)")]
+        [Header("Limits (Percentage Only)")]
+        [SerializeField] private float minValue;
+        [SerializeField] private float maxValue = 100f;
+        
+        [Header("Formula (Optional)")]
         [TextArea(2, 4)]
-        [SerializeField] private string formula = "";
+        [SerializeField] private string formula;
         
-        [Header("Descrição")]
+        [Header("Description")]
         [TextArea(3, 5)]
-        [SerializeField] private string description = "";
+        [SerializeField] private string description;
         
         public string DisplayName 
         { 
@@ -36,13 +40,55 @@ namespace StatForge
         }
         
         public string Category { get => category; set => category = value; }
+        public StatValueType ValueType { get => valueType; set => valueType = value; }
         public float DefaultValue { get => defaultValue; set => defaultValue = value; }
-        public float MinValue { get => minValue; set => minValue = value; }
-        public float MaxValue { get => maxValue; set => maxValue = value; }
         public string Formula { get => formula; set => formula = value; }
         public string Description { get => description; set => description = value; }
         
+        public float MinValue 
+        { 
+            get => valueType == StatValueType.Percentage ? minValue : float.MinValue;
+            set => minValue = value;
+        }
+        
+        public float MaxValue 
+        { 
+            get => valueType == StatValueType.Percentage ? maxValue : float.MaxValue;
+            set => maxValue = value;
+        }
+        
         public bool HasFormula => !string.IsNullOrEmpty(formula);
+        public bool HasLimits => valueType == StatValueType.Percentage;
+        
+        public string FormatValue(float value)
+        {
+            return valueType switch
+            {
+                StatValueType.Normal => ((int)System.Math.Round(value, System.MidpointRounding.AwayFromZero)).ToString(),
+                StatValueType.Percentage => $"{value.ToString("F2", CultureInfo.InvariantCulture)}%",
+                StatValueType.Rate => $"{value.ToString("F1", CultureInfo.InvariantCulture)}/s",
+                _ => value.ToString("F1", CultureInfo.InvariantCulture)
+            };
+        }
+        
+        public string GetValueSuffix()
+        {
+            return valueType switch
+            {
+                StatValueType.Percentage => "%",
+                StatValueType.Rate => "/s",
+                _ => ""
+            };
+        }
+        
+        public void AutoAdjustRangeForType()
+        {
+            if (valueType == StatValueType.Percentage)
+            {
+                if (minValue < 0f) minValue = 0f;
+                if (maxValue > 100f) maxValue = 100f;
+            }
+        }
         
         private string GenerateShortName()
         {
@@ -62,18 +108,18 @@ namespace StatForge
         
         private void OnValidate()
         {
-            if (minValue > maxValue)
-                minValue = maxValue;
-            
-            if (defaultValue < minValue)
-                defaultValue = minValue;
-            else if (defaultValue > maxValue)
-                defaultValue = maxValue;
-                
-            if (maxValue > 1000000f)
+            if (valueType == StatValueType.Percentage)
             {
-                Debug.LogWarning($"[StatForge] Valor máximo muito alto para {displayName}. Considere usar valores menores para evitar overflow.");
+                if (minValue > maxValue)
+                    minValue = maxValue;
+                
+                if (defaultValue < minValue)
+                    defaultValue = minValue;
+                else if (defaultValue > maxValue)
+                    defaultValue = maxValue;
             }
+            
+            AutoAdjustRangeForType();
         }
     }
 }

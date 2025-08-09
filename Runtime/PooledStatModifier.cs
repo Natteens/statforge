@@ -4,7 +4,7 @@ using UnityEngine;
 namespace StatForge
 {
     [Serializable]
-    public class StatModifier : IStatModifier
+    public class PooledStatModifier : IStatModifier
     {
         [SerializeField] private string id;
         [SerializeField] private float value;
@@ -29,19 +29,36 @@ namespace StatForge
         public string Source => source;
         public object Tag => tag;
         
-        public StatModifier(Stat targetStat, float value, ModifierType type = ModifierType.Additive, 
-                           ModifierDuration duration = ModifierDuration.Permanent, float time = 0f,
-                           ModifierPriority priority = ModifierPriority.Normal, string source = "", object tag = null)
+        public void Initialize(Stat targetStat, float value, ModifierType type, string source)
         {
-            this.id = Guid.NewGuid().ToString();
+            id = StatIdPool.GetId();
             this.targetStat = targetStat;
             this.value = value;
             this.type = type;
-            this.duration = duration;
-            this.priority = priority;
-            this.remainingTime = time;
             this.source = source ?? "";
-            this.tag = tag;
+            duration = ModifierDuration.Permanent;
+            priority = ModifierPriority.Normal;
+            remainingTime = 0f;
+            tag = null;
+            removalCondition = null;
+        }
+        
+        public void Reset()
+        {
+            if (!string.IsNullOrEmpty(id))
+            {
+                StatIdPool.ReturnId(id);
+                id = null;
+            }
+            targetStat = null;
+            value = 0f;
+            type = ModifierType.Additive;
+            duration = ModifierDuration.Permanent;
+            priority = ModifierPriority.Normal;
+            remainingTime = 0f;
+            source = "";
+            tag = null;
+            removalCondition = null;
         }
         
         public bool Update(float deltaTime)
@@ -60,7 +77,7 @@ namespace StatForge
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError($"Erro na condição do modificador {id}: {e.Message}");
+                    Debug.LogError($"Error in modifier condition {id}: {e.Message}");
                     return true;
                 }
             }
@@ -80,7 +97,12 @@ namespace StatForge
         
         public IStatModifier Clone()
         {
-            var clone = new StatModifier(targetStat, value, type, duration, remainingTime, priority, source, tag);
+            var clone = new PooledStatModifier();
+            clone.Initialize(targetStat, value, type, source);
+            clone.duration = duration;
+            clone.priority = priority;
+            clone.remainingTime = remainingTime;
+            clone.tag = tag;
             clone.removalCondition = removalCondition;
             return clone;
         }

@@ -8,14 +8,14 @@ namespace StatForge
     [Serializable]
     public class StatContainer
     {
-        [SerializeField] private List<Stat> stats = new List<Stat>();
-        [SerializeField] private string containerName = "Default";
+        [SerializeField] private List<Stat> stats = new();
+        [SerializeField] private string containerName;
         
-        private Dictionary<string, Stat> statsByName = new Dictionary<string, Stat>();
-        private Dictionary<string, Stat> statsByShort = new Dictionary<string, Stat>();
-        private Dictionary<Stat, List<Stat>> dependencies = new Dictionary<Stat, List<Stat>>();
-        private bool isInitialized = false;
-        private HashSet<string> initializingStats = new HashSet<string>(); // Prevent circular initialization
+        private Dictionary<string, Stat> statsByName = new();
+        private Dictionary<string, Stat> statsByShort = new();
+        private Dictionary<Stat, List<Stat>> dependencies = new();
+        private bool isInitialized;
+        private HashSet<string> initializingStats = new();
         
         public string Name => containerName;
         public IReadOnlyList<Stat> Stats => stats;
@@ -40,7 +40,6 @@ namespace StatForge
             dependencies.Clear();
             initializingStats.Clear();
             
-            // Register all stats first
             foreach (var stat in stats)
             {
                 if (stat?.StatType == null) continue;
@@ -51,11 +50,9 @@ namespace StatForge
                 RegisterStat(stat);
             }
             
-            // Then build dependencies (safe operation)
             BuildDependencies();
             isInitialized = true;
             
-            // Finally calculate values
             RecalculateAllStats();
         }
         
@@ -81,6 +78,11 @@ namespace StatForge
                 {
                     var deps = FindStatDependencies(stat.StatType.Formula);
                     dependencies[stat] = deps;
+                    
+                    foreach (var dep in deps)
+                    {
+                        Stat.RegisterDependency(dep.Id, stat);
+                    }
                 }
             }
         }
@@ -98,7 +100,7 @@ namespace StatForge
                 foreach (System.Text.RegularExpressions.Match match in matches)
                 {
                     var statName = match.Groups[1].Value;
-                    var foundStat = GetStatInternal(statName); // Use internal method to avoid circular calls
+                    var foundStat = GetStatInternal(statName);
                     if (foundStat != null && !deps.Contains(foundStat))
                     {
                         deps.Add(foundStat);
@@ -128,7 +130,6 @@ namespace StatForge
         {
             if (!isInitialized) 
             {
-                // Prevent circular initialization
                 if (initializingStats.Contains(nameOrShort))
                 {
                     Debug.LogWarning($"[StatForge] Circular dependency detected for stat '{nameOrShort}'");
@@ -145,13 +146,10 @@ namespace StatForge
         
         public float GetStatValue(string nameOrShort)
         {
-            var stat = GetStatInternal(nameOrShort); // Use internal to avoid initialization loops
+            var stat = GetStatInternal(nameOrShort);
             if (stat != null)
             {
-                // For formulas, use base values + additive modifiers only to prevent recursion
-                return stat.BaseValue + stat.Modifiers
-                    .Where(m => m.Type == ModifierType.Additive)
-                    .Sum(m => m.Value);
+                return stat.Value; 
             }
             return 0f;
         }
@@ -235,13 +233,11 @@ namespace StatForge
         
         private void RecalculateAllStats()
         {
-            // First stats without formulas
-            foreach (var stat in stats.Where(s => !s.StatType?.HasFormula == true))
+            foreach (var stat in stats.Where(s => s.StatType?.HasFormula != true))
             {
                 stat.ForceRecalculate();
             }
             
-            // Then stats with formulas
             foreach (var stat in stats.Where(s => s.StatType?.HasFormula == true))
             {
                 stat.ForceRecalculate();
@@ -251,6 +247,7 @@ namespace StatForge
         private void HandleStatChanged(Stat stat, float oldValue, float newValue)
         {
             OnStatChanged?.Invoke(stat, oldValue, newValue);
+            NotifyStatChanged(stat);
         }
         
         public IEnumerable<Stat> GetStatsByCategory(string category)
@@ -267,7 +264,7 @@ namespace StatForge
         {
             foreach (var stat in stats)
             {
-                stat.ForceRecalculate();
+                stat.UpdateModifiers(deltaTime);
             }
         }
         

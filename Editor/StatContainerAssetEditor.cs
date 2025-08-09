@@ -25,13 +25,11 @@ namespace StatForge.Editor
 
             EditorGUILayout.LabelField($"Stats ({container.StatTypes.Count})", EditorStyles.boldLabel);
 
-            // Lista de stats
             var statsProp = serializedObject.FindProperty("statTypes");
             EditorGUILayout.PropertyField(statsProp, true);
 
             EditorGUILayout.Space(10);
 
-            // Preview dos stats
             if (container.StatTypes.Count > 0)
             {
                 EditorGUILayout.LabelField("Preview:", EditorStyles.boldLabel);
@@ -53,7 +51,6 @@ namespace StatForge.Editor
 
             EditorGUILayout.Space(10);
 
-            // Botão para testar container
             if (Application.isPlaying && GUILayout.Button("Testar Container"))
             {
                 var runtimeContainer = container.CreateRuntimeContainer();

@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -26,7 +27,7 @@ namespace StatForge.Editor
         public static readonly Color SidebarColor = new(0.22f, 0.22f, 0.22f);
         public static readonly Color HeaderColor = new(0.19f, 0.19f, 0.19f);
         public static readonly Color SelectedColor = new(0.24f, 0.49f, 0.91f, 0.3f);
-        public string[] AllCategories = new string[0];
+        public string[] AllCategories = Array.Empty<string>();
 
         public List<StatContainerAsset> AllContainers = new();
         public List<StatType> AllStatTypes = new();
@@ -41,6 +42,7 @@ namespace StatForge.Editor
 
         public string NewContainerName = "";
         public string NewStatCategory = "General";
+        public StatValueType NewStatValueType = StatValueType.Normal;
         public float NewStatDefault;
         public string NewStatDescription = "";
         public string NewStatFormula = "";
@@ -55,7 +57,7 @@ namespace StatForge.Editor
         public StatContainerAsset SelectedContainer;
 
         public StatType SelectedStat;
-        public List<StatType> SelectedStats = new();
+        public readonly List<StatType> SelectedStats = new();
 
         public void Reset()
         {
@@ -72,6 +74,7 @@ namespace StatForge.Editor
             NewStatName = "";
             NewStatShortName = "";
             NewStatCategory = "General";
+            NewStatValueType = StatValueType.Normal;
             NewStatFormula = "";
             NewStatDescription = "";
             NewStatDefault = 0f;

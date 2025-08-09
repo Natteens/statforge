@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 
 namespace StatForge
@@ -14,49 +14,71 @@ namespace StatForge
         
         private float cachedValue;
         private bool needsRecalculation = true;
-        private List<IStatModifier> modifiers = new List<IStatModifier>();
+        private bool isDirty = true;
+        
+        private IStatModifier[] modifiers = new IStatModifier[8];
+        private int modifierCount;
         
         private static readonly Dictionary<string, StatRegistry> registriesByStatId = new(512);
         private static readonly Dictionary<string, List<Stat>> dependentsCache = new(256);
-        private static readonly List<IStatModifier> tempModifierList = new(32);
+        
+        private static readonly Dictionary<string, Stat> globalStats = new(512);
         
         [NonSerialized] private StatContainer parentContainer;
-        [NonSerialized] private float lastSerializedValue = float.MinValue;
-        [NonSerialized] private bool hasOverrideCache;
-        [NonSerialized] private int modifierVersion;
-        [NonSerialized] private float lastCalculatedBaseValue = float.MinValue;
+        [NonSerialized] private bool hasOverrideModifier;
+        [NonSerialized] private float lastCalculatedBaseValue;
+        [NonSerialized] private float lastFormulaResult;
+        [NonSerialized] private bool formulaEvaluated;
+        [NonSerialized] private string ownerPrefix;
+        
+        [NonSerialized] private bool isNotifying;
+        [NonSerialized] private static readonly HashSet<string> currentlyNotifying = new(32);
+        
+        [NonSerialized] private float additiveCache;
+        [NonSerialized] private float multiplicativeCache = 1f;
+        [NonSerialized] private float percentageCache;
+        [NonSerialized] private IStatModifier overrideCache;
+        [NonSerialized] private bool modifierCacheValid;
         
         public StatType StatType => statType;
         public string Name => statType ? statType.DisplayName : "None";
         public string ShortName => statType ? statType.ShortName : "";
+        public StatValueType ValueType => statType ? statType.ValueType : StatValueType.Normal;
         public string Id 
         { 
             get 
             { 
                 if (string.IsNullOrEmpty(statId))
-                    statId = System.Guid.NewGuid().ToString();
+                    statId = StatIdPool.GetId();
                 return statId; 
             } 
         }
-        public IReadOnlyList<IStatModifier> Modifiers => modifiers;
+        
+        public IReadOnlyList<IStatModifier> Modifiers
+        {
+            get
+            {
+                var list = new List<IStatModifier>(modifierCount);
+                for (int i = 0; i < modifierCount; i++)
+                {
+                    if (modifiers[i] != null)
+                        list.Add(modifiers[i]);
+                }
+                return list;
+            }
+        }
         
         public float BaseValue 
         { 
-            get 
-            {
-                if (Application.isPlaying && Math.Abs(lastSerializedValue - baseValue) > float.Epsilon)
-                {
-                    lastSerializedValue = baseValue;
-                    InvalidateCache();
-                }
-                return baseValue;
-            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => baseValue;
             set 
             {
                 if (Math.Abs(baseValue - value) > float.Epsilon)
                 {
+                    var oldBase = baseValue;
                     baseValue = value;
-                    lastSerializedValue = value;
+                    OnBaseValueChanged?.Invoke(this, oldBase, value);
                     InvalidateCache();
                 }
             }
@@ -64,91 +86,202 @@ namespace StatForge
         
         public float Value 
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                if (needsRecalculation || Math.Abs(lastCalculatedBaseValue - baseValue) > float.Epsilon)
+                RegisterIfNeeded();
+                
+                if (needsRecalculation || isDirty || Math.Abs(lastCalculatedBaseValue - baseValue) > float.Epsilon)
                     RecalculateValue();
                 return cachedValue;
             }
         }
         
+        public string FormattedValue 
+        { 
+            get 
+            {
+                if (statType != null)
+                    return statType.FormatValue(Value);
+                
+                return Math.Round(Value, MidpointRounding.AwayFromZero).ToString("F0");
+            }
+        }
+        
+        public int IntValue 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => (int)Math.Round(Value, MidpointRounding.AwayFromZero);
+        }
+        
+        public float PercentageNormalized => ValueType == StatValueType.Percentage ? Value * 0.01f : Value;
+        
         public event Action<Stat, float, float> OnValueChanged;
         public event Action<Stat, IStatModifier> OnModifierAdded;
         public event Action<Stat, IStatModifier> OnModifierRemoved;
+        public event Action<Stat, float, float> OnBaseValueChanged;
         
         public Stat() 
         {
-            statId = System.Guid.NewGuid().ToString();
-            lastSerializedValue = baseValue;
+            statId = StatIdPool.GetId();
+            InitializeDefaults();
         }
         
         public Stat(StatType type, float value = 0f, string customId = null)
         {
             statType = type;
             baseValue = value;
-            statId = customId ?? System.Guid.NewGuid().ToString();
-            lastSerializedValue = value;
+            statId = customId ?? StatIdPool.GetId();
             lastCalculatedBaseValue = value;
+            InitializeDefaults();
+        }
+        
+        private Stat(float value)
+        {
+            statType = null;
+            baseValue = value;
+            statId = StatIdPool.GetId();
+            lastCalculatedBaseValue = value;
+            InitializeDefaults();
+        }
+        
+        private void InitializeDefaults()
+        {
+            cachedValue = baseValue;
+            additiveCache = 0f;
+            multiplicativeCache = 1f;
+            percentageCache = 0f;
+            overrideCache = null;
+            modifierCacheValid = false;
+            hasOverrideModifier = false;
+            formulaEvaluated = false;
+            lastFormulaResult = 0f;
+            ownerPrefix = "Global";
+            isNotifying = false;
+            
+            RegisterIfNeeded();
+        }
+        
+        private void RegisterIfNeeded()
+        {
+            if (statType == null) return;
+            
+            if (ownerPrefix == "Global")
+            {
+                ownerPrefix = DetectOwnerPrefix();
+            }
+            
+            if (!string.IsNullOrEmpty(statType.DisplayName))
+            {
+                globalStats[$"{ownerPrefix}_{statType.DisplayName}"] = this;
+            }
+            
+            if (!string.IsNullOrEmpty(statType.ShortName))
+            {
+                globalStats[$"{ownerPrefix}_{statType.ShortName}"] = this;
+            }
+            
+            globalStats[statType.DisplayName] = this;
+            globalStats[statType.ShortName] = this;
+        }
+        
+        private string DetectOwnerPrefix()
+        {
+            try
+            {
+                var stackTrace = new System.Diagnostics.StackTrace();
+                for (int i = 0; i < stackTrace.FrameCount; i++)
+                {
+                    var frame = stackTrace.GetFrame(i);
+                    var method = frame?.GetMethod();
+                    
+                    if (method?.DeclaringType != null && method.DeclaringType.IsSubclassOf(typeof(UnityEngine.Object)))
+                    {
+                        return method.DeclaringType.Name;
+                    }
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+
+            return "Global";
         }
         
         public void SetContainer(StatContainer container)
         {
-            parentContainer = container;
-            InvalidateCache();
+            if (parentContainer != container)
+            {
+                parentContainer = container;
+                ownerPrefix = container?.Name ?? "Global";
+                InvalidateCache();
+                InvalidateFormula();
+            }
         }
         
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void InvalidateCache()
         {
             needsRecalculation = true;
-            NotifyDependentStats();
+            isDirty = true;
+            modifierCacheValid = false;
+            NotifyDependents();
         }
         
-        private void NotifyDependentStats()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InvalidateFormula()
         {
-            if (dependentsCache.TryGetValue(Id, out var dependents))
-            {
-                for (int i = 0; i < dependents.Count; i++)
-                {
-                    var dependent = dependents[i];
-                    if (dependent != null)
-                        dependent.needsRecalculation = true;
-                }
+            formulaEvaluated = false;
+            lastFormulaResult = 0f;
+            InvalidateCache();
+        }
+        
+        private void NotifyDependents()
+        {
+            if (isNotifying || currentlyNotifying.Contains(Id))
                 return;
-            }
+                
+            isNotifying = true;
+            currentlyNotifying.Add(Id);
             
-            parentContainer?.NotifyStatChanged(this);
-            
-            var owner = GetOwner();
-            if (owner != null)
+            try
             {
-                EnsureRegistry(owner);
+                if (dependentsCache.TryGetValue(Id, out var dependents))
+                {
+                    foreach (var dependent in dependents)
+                    {
+                        if (dependent != null && !currentlyNotifying.Contains(dependent.Id))
+                        {
+                            dependent.InvalidateCache();
+                        }
+                    }
+                }
+                
+                parentContainer?.NotifyStatChanged(this);
+                
                 if (registriesByStatId.TryGetValue(Id, out var registry))
                 {
                     registry.NotifyStatChanged(this);
                 }
             }
+            finally
+            {
+                currentlyNotifying.Remove(Id);
+                isNotifying = false;
+            }
         }
         
         private void RecalculateValue()
         {
-            if (!statType)
-            {
-                cachedValue = 0f;
-                needsRecalculation = false;
-                lastCalculatedBaseValue = baseValue;
-                return;
-            }
-            
             var oldValue = cachedValue;
-            float newValue = CalculateFinalValueOptimized();
             
-            if (!hasOverrideCache)
-            {
-                newValue = Mathf.Clamp(newValue, statType.MinValue, statType.MaxValue);
-            }
+            var newValue = CalculateFinalValue();
+            newValue = ApplyClampingIfNeeded(newValue);
             
             cachedValue = newValue;
             needsRecalculation = false;
+            isDirty = false;
             lastCalculatedBaseValue = baseValue;
             
             if (Math.Abs(oldValue - newValue) > float.Epsilon)
@@ -157,112 +290,139 @@ namespace StatForge
             }
         }
         
-        private float CalculateFinalValueOptimized()
+        private float CalculateFinalValue()
         {
-            var workingValue = baseValue;
+            var result = baseValue;
             
-            if (statType.HasFormula)
+            if (statType?.HasFormula == true)
             {
-                workingValue += EvaluateFormula();
+                var formulaResult = EvaluateFormula();
+                result = baseValue + formulaResult;
             }
             
-            return ApplyModifiersOptimized(workingValue);
+            result = ApplyModifiers(result);
+            return result;
         }
         
-        private float ApplyModifiersOptimized(float inputValue)
+        private float ApplyModifiers(float inputValue)
         {
-            UpdateExpiredModifiersOptimized();
-            
-            if (modifiers.Count == 0)
+            if (modifierCount == 0)
             {
-                hasOverrideCache = false;
+                hasOverrideModifier = false;
                 return inputValue;
             }
             
-            IStatModifier overrideModifier = null;
-            float additiveSum = 0f;
-            float multiplicativeProduct = 1f;
-            float percentageSum = 0f;
+            if (!modifierCacheValid)
+                RecalculateModifierCache();
             
-            for (int i = 0; i < modifiers.Count; i++)
+            if (overrideCache != null)
             {
-                var modifier = modifiers[i];
-                
-                switch (modifier.Type)
-                {
-                    case ModifierType.Override:
-                        if (overrideModifier == null || modifier.Priority >= overrideModifier.Priority)
-                            overrideModifier = modifier;
-                        break;
-                    case ModifierType.Additive:
-                        additiveSum += modifier.Value;
-                        break;
-                    case ModifierType.Subtractive:
-                        additiveSum -= modifier.Value;
-                        break;
-                    case ModifierType.Multiplicative:
-                        multiplicativeProduct *= modifier.Value;
-                        break;
-                    case ModifierType.Percentage:
-                        percentageSum += modifier.Value;
-                        break;
-                }
+                hasOverrideModifier = true;
+                return overrideCache.Value;
             }
             
-            hasOverrideCache = overrideModifier != null;
+            hasOverrideModifier = false;
+         
+            var result = inputValue;
             
-            if (overrideModifier != null)
-                return overrideModifier.Value;
+            result += additiveCache;
             
-            var result = inputValue + additiveSum;
-            result += baseValue * percentageSum * 0.01f;
-            result *= multiplicativeProduct;
+            result += baseValue * (percentageCache * 0.01f);
+            
+            result *= multiplicativeCache;
             
             return result;
         }
         
-        private void UpdateExpiredModifiersOptimized()
+        private float ApplyClampingIfNeeded(float value)
         {
-            if (modifiers.Count == 0) return;
+            if (hasOverrideModifier)
+                return value;
+                
+            if (statType == null)
+                return value;
             
-            var deltaTime = Application.isPlaying ? Time.deltaTime : 0f;
-            var currentVersion = modifierVersion;
-            
-            for (int i = modifiers.Count - 1; i >= 0; i--)
+            if (statType.ValueType == StatValueType.Percentage)
             {
-                var modifier = modifiers[i];
-                if (modifier.Update(deltaTime) || modifier.ShouldRemove())
-                {
-                    modifiers.RemoveAt(i);
-                    modifierVersion++;
-                    OnModifierRemoved?.Invoke(this, modifier);
-                }
+                return Mathf.Clamp(value, statType.MinValue, statType.MaxValue);
             }
             
-            if (modifierVersion != currentVersion)
-            {
-                needsRecalculation = true;
-                NotifyDependentStats();
-            }
+            return value;
         }
         
         private float EvaluateFormula()
         {
-            if (parentContainer != null)
-                return FormulaEvaluator.Evaluate(statType.Formula, parentContainer);
-            
-            if (registriesByStatId.TryGetValue(Id, out var registry))
-                return FormulaEvaluator.Evaluate(statType.Formula, registry);
-            
-            var owner = GetOwner();
-            if (owner != null)
+            if (formulaEvaluated)
+                return lastFormulaResult;
+                
+            try
             {
-                EnsureRegistry(owner);
-                if (registriesByStatId.TryGetValue(Id, out var newRegistry))
-                    return FormulaEvaluator.Evaluate(statType.Formula, newRegistry);
+                float result = 0f;
+                
+                if (parentContainer != null)
+                {
+                    result = FormulaEvaluator.Evaluate(statType.Formula, parentContainer);
+                }
+                else if (registriesByStatId.TryGetValue(Id, out var registry))
+                {
+                    result = FormulaEvaluator.Evaluate(statType.Formula, registry);
+                }
+                else
+                {
+                    result = FormulaEvaluator.EvaluateGlobal(statType.Formula, ownerPrefix, globalStats);
+                }
+                
+                lastFormulaResult = result;
+                formulaEvaluated = true;
+                return result;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[StatForge] Error evaluating formula '{statType.Formula}' for stat '{Name}': {e.Message}");
+                lastFormulaResult = 0f;
+                formulaEvaluated = true;
+                return 0f;
+            }
+        }
+        
+        private void RecalculateModifierCache()
+        {
+            additiveCache = 0f;
+            multiplicativeCache = 1f;
+            percentageCache = 0f;
+            overrideCache = null;
+            
+            for (int i = 0; i < modifierCount; i++)
+            {
+                var modifier = modifiers[i];
+                if (modifier == null) continue;
+                
+                switch (modifier.Type)
+                {
+                    case ModifierType.Override:
+                        if (overrideCache == null || modifier.Priority >= overrideCache.Priority)
+                            overrideCache = modifier;
+                        break;
+                        
+                    case ModifierType.Additive:
+                        additiveCache += modifier.Value;
+                        break;
+                        
+                    case ModifierType.Subtractive:
+                        additiveCache -= modifier.Value;
+                        break;
+                        
+                    case ModifierType.Multiplicative:
+                        multiplicativeCache *= modifier.Value;
+                        break;
+                        
+                    case ModifierType.Percentage:
+                        percentageCache += modifier.Value;
+                        break;
+                }
             }
             
-            return 0f;
+            modifierCacheValid = true;
         }
         
         public IStatModifier AddModifier(float value, ModifierType type = ModifierType.Additive, 
@@ -271,18 +431,24 @@ namespace StatForge
                                         string source = "", object tag = null)
         {
             var modifier = new StatModifier(this, value, type, duration, time, priority, source, tag);
-            return AddModifierFast(modifier);
+            return AddModifierInternal(modifier);
         }
         
-        public IStatModifier AddModifier(IStatModifier modifier) => AddModifierFast(modifier);
+        public IStatModifier AddModifier(IStatModifier modifier) => AddModifierInternal(modifier);
         
-        private IStatModifier AddModifierFast(IStatModifier modifier)
+        private IStatModifier AddModifierInternal(IStatModifier modifier)
         {
             if (modifier == null) return null;
             
-            modifiers.Add(modifier);
-            modifierVersion++;
-            InvalidateCache();
+            if (modifierCount >= modifiers.Length)
+            {
+                var newArray = new IStatModifier[modifiers.Length * 2];
+                Array.Copy(modifiers, newArray, modifiers.Length);
+                modifiers = newArray;
+            }
+            
+            modifiers[modifierCount++] = modifier;
+            InvalidateModifierCache();
             OnModifierAdded?.Invoke(this, modifier);
             
             return modifier;
@@ -290,28 +456,11 @@ namespace StatForge
         
         public bool RemoveModifier(IStatModifier modifier)
         {
-            var index = modifiers.IndexOf(modifier);
-            if (index >= 0)
+            for (int i = 0; i < modifierCount; i++)
             {
-                modifiers.RemoveAt(index);
-                modifierVersion++;
-                InvalidateCache();
-                OnModifierRemoved?.Invoke(this, modifier);
-                return true;
-            }
-            return false;
-        }
-        
-        public bool RemoveModifier(string id)
-        {
-            for (int i = 0; i < modifiers.Count; i++)
-            {
-                if (modifiers[i].Id == id)
+                if (modifiers[i] == modifier)
                 {
-                    var modifier = modifiers[i];
-                    modifiers.RemoveAt(i);
-                    modifierVersion++;
-                    InvalidateCache();
+                    RemoveModifierAt(i);
                     OnModifierRemoved?.Invoke(this, modifier);
                     return true;
                 }
@@ -319,56 +468,81 @@ namespace StatForge
             return false;
         }
         
-        public void RemoveModifiersBySource(string source)
+        public bool RemoveModifier(string id)
         {
-            for (int i = modifiers.Count - 1; i >= 0; i--)
+            for (int i = 0; i < modifierCount; i++)
             {
-                if (modifiers[i].Source == source)
+                if (modifiers[i]?.Id == id)
                 {
                     var modifier = modifiers[i];
-                    modifiers.RemoveAt(i);
-                    modifierVersion++;
+                    RemoveModifierAt(i);
+                    OnModifierRemoved?.Invoke(this, modifier);
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        private void RemoveModifierAt(int index)
+        {
+            for (int i = index; i < modifierCount - 1; i++)
+            {
+                modifiers[i] = modifiers[i + 1];
+            }
+            
+            modifiers[modifierCount - 1] = null;
+            modifierCount--;
+            InvalidateModifierCache();
+        }
+        
+        public void RemoveModifiersBySource(string source)
+        {
+            for (int i = modifierCount - 1; i >= 0; i--)
+            {
+                if (modifiers[i]?.Source == source)
+                {
+                    var modifier = modifiers[i];
+                    RemoveModifierAt(i);
                     OnModifierRemoved?.Invoke(this, modifier);
                 }
             }
-            InvalidateCache();
         }
         
         public void RemoveModifiersByTag(object tag)
         {
-            for (int i = modifiers.Count - 1; i >= 0; i--)
+            for (int i = modifierCount - 1; i >= 0; i--)
             {
-                if (Equals(modifiers[i].Tag, tag))
+                if (Equals(modifiers[i]?.Tag, tag))
                 {
                     var modifier = modifiers[i];
-                    modifiers.RemoveAt(i);
-                    modifierVersion++;
+                    RemoveModifierAt(i);
                     OnModifierRemoved?.Invoke(this, modifier);
                 }
             }
-            InvalidateCache();
         }
         
         public void ClearModifiers()
         {
-            if (modifiers.Count == 0) return;
-            
-            tempModifierList.Clear();
-            tempModifierList.AddRange(modifiers);
-            modifiers.Clear();
-            modifierVersion++;
-            InvalidateCache();
-            
-            for (int i = 0; i < tempModifierList.Count; i++)
+            for (int i = 0; i < modifierCount; i++)
             {
-                OnModifierRemoved?.Invoke(this, tempModifierList[i]);
+                var modifier = modifiers[i];
+                modifiers[i] = null;
+                OnModifierRemoved?.Invoke(this, modifier);
             }
             
-            tempModifierList.Clear();
+            modifierCount = 0;
+            InvalidateModifierCache();
+        }
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InvalidateModifierCache()
+        {
+            modifierCacheValid = false;
+            InvalidateCache();
         }
         
         public IStatModifier AddBonus(float value, string source = "") => 
-            AddModifier(value, ModifierType.Additive, source: source);
+            AddModifier(value, source: source);
         
         public IStatModifier AddDebuff(float value, string source = "") => 
             AddModifier(value, ModifierType.Subtractive, source: source);
@@ -384,6 +558,31 @@ namespace StatForge
         
         public IStatModifier SetOverride(float value, string source = "") => 
             AddModifier(value, ModifierType.Override, priority: ModifierPriority.Override, source: source);
+        
+        public void ForceRecalculate()
+        {
+            InvalidateCache();
+            InvalidateFormula();
+            var _ = Value;
+        }
+        
+        public void UpdateModifiers(float deltaTime)
+        {
+            bool removedAny = false;
+            
+            for (int i = modifierCount - 1; i >= 0; i--)
+            {
+                var modifier = modifiers[i];
+                if (modifier != null && modifier.Update(deltaTime))
+                {
+                    RemoveModifierAt(i);
+                    removedAny = true;
+                }
+            }
+            
+            if (removedAny)
+                InvalidateModifierCache();
+        }
         
         public static void RegisterDependency(string sourceStatId, Stat dependentStat)
         {
@@ -413,51 +612,30 @@ namespace StatForge
         public static void UnregisterStatRegistry(string statId) =>
             registriesByStatId.Remove(statId);
         
-        private object GetOwner()
+        public float GetValueFast()
         {
-            var allObjects = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
-            return allObjects.FirstOrDefault(HasThisStat);
+            return needsRecalculation ? Value : cachedValue;
         }
         
-        private bool HasThisStat(object owner)
-        {
-            var fields = owner.GetType().GetFields(
-                System.Reflection.BindingFlags.Public | 
-                System.Reflection.BindingFlags.NonPublic | 
-                System.Reflection.BindingFlags.Instance);
-            
-            for (int i = 0; i < fields.Length; i++)
-            {
-                if (fields[i].FieldType == typeof(Stat))
-                {
-                    var stat = fields[i].GetValue(owner) as Stat;
-                    if (stat == this) return true;
-                }
-            }
-            return false;
-        }
+        public bool HasModifiers => modifierCount > 0;
+        public bool HasFormula => statType?.HasFormula == true;
+        public bool IsDirty => isDirty || needsRecalculation;
         
-        private void EnsureRegistry(object owner)
-        {
-            if (!registriesByStatId.ContainsKey(Id))
-                registriesByStatId[Id] = new StatRegistry(owner);
-        }
-        
-        public void ForceRecalculate()
-        {
-            needsRecalculation = true;
-        }
-        
+      
         public static implicit operator float(Stat stat) => stat?.Value ?? 0f;
+        public static implicit operator Stat(float value) => new(value);
+        public static implicit operator Stat(int value) => new(value);
         
-        public override string ToString() => $"{Name}: {Value:F1}";
+        public override string ToString() => $"{Name}: {FormattedValue}";
         
+       
         public static void CleanupStat(string statId)
         {
             if (string.IsNullOrEmpty(statId)) return;
             
             registriesByStatId.Remove(statId);
             dependentsCache.Remove(statId);
+            currentlyNotifying.Remove(statId);
             
             var keysToRemove = new List<string>(8);
             
@@ -476,10 +654,30 @@ namespace StatForge
                     keysToRemove.Add(kvp.Key);
             }
             
-            for (int i = 0; i < keysToRemove.Count; i++)
+            foreach (var key in keysToRemove)
             {
-                dependentsCache.Remove(keysToRemove[i]);
+                dependentsCache.Remove(key);
             }
+        }
+        
+        public static void ClearFieldCache() => StatRegistry.ClearFieldCache();
+        
+        public static void ClearAllCaches()
+        {
+            registriesByStatId.Clear();
+            dependentsCache.Clear();
+            globalStats.Clear();
+            currentlyNotifying.Clear();
+            StatRegistry.ClearFieldCache();
+        }
+        
+        public float GetBaseValueRaw() => baseValue;
+        public float GetCachedValueRaw() => cachedValue;
+        public int GetModifierCount() => modifierCount;
+        public bool GetNeedsRecalculation() => needsRecalculation;
+        public string GetDebugInfo()
+        {
+            return $"Stat[{Name}] Base:{baseValue:F2} Cached:{cachedValue:F2} Mods:{modifierCount} Dirty:{isDirty}";
         }
     }
 }
