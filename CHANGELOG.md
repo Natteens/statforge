@@ -1,3 +1,10 @@
+## [0.3.1](https://github.com/Natteens/statforge/compare/v0.3.0...v0.3.1) (2025-08-09)
+
+
+### Bug Fixes
+
+* Sync Stat base value with StatType default value ([9f31cc4](https://github.com/Natteens/statforge/commit/9f31cc431a08d81f1c9d812569c4e53f1410db57))
+
 # [0.3.0](https://github.com/Natteens/statforge/compare/v0.2.3...v0.3.0) (2025-08-09)
 
 
