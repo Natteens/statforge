@@ -1,3 +1,10 @@
+# [0.3.0](https://github.com/Natteens/statforge/compare/v0.2.3...v0.3.0) (2025-08-09)
+
+
+### Features
+
+* Enhance StatForge editor and runtime features ([efbd1d8](https://github.com/Natteens/statforge/commit/efbd1d80f49e5f28b9f3ec4476ea97ea496c528f))
+
 ## [0.2.3](https://github.com/Natteens/statforge/compare/v0.2.2...v0.2.3) (2025-08-08)
 
 
