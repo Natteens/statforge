@@ -130,7 +130,7 @@ namespace StatForge.Editor
                 fontSize = 16,
                 normal = { textColor = EditorGUIUtility.isProSkin ? Color.white : Color.black }
             };
-            GUILayout.Label("⚡ StatForge", titleStyle, GUILayout.ExpandWidth(false));
+            GUILayout.Label("StatForge", titleStyle, GUILayout.ExpandWidth(false));
 
             GUILayout.FlexibleSpace();
 
