@@ -69,7 +69,7 @@ namespace StatForge
         }
         
         public float BaseValue 
-        { 
+        {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => baseValue;
             set 
@@ -90,6 +90,7 @@ namespace StatForge
             get
             {
                 RegisterIfNeeded();
+                EnsureDefaultValue();
                 
                 if (needsRecalculation || isDirty || Math.Abs(lastCalculatedBaseValue - baseValue) > float.Epsilon)
                     RecalculateValue();
@@ -125,6 +126,12 @@ namespace StatForge
         {
             statId = StatIdPool.GetId();
             InitializeDefaults();
+            if (statType != null)
+            {
+                baseValue = statType.DefaultValue;
+                lastCalculatedBaseValue = baseValue;
+                cachedValue = baseValue;
+            }
         }
         
         public Stat(StatType type, float value = 0f, string customId = null)
@@ -290,6 +297,15 @@ namespace StatForge
             }
         }
         
+        private void EnsureDefaultValue()
+        {
+            if (Math.Abs(baseValue) < float.Epsilon && statType != null && Math.Abs(statType.DefaultValue) > float.Epsilon)
+            {
+                baseValue = statType.DefaultValue;
+                lastCalculatedBaseValue = baseValue;
+                cachedValue = baseValue;
+            }
+        }
         private float CalculateFinalValue()
         {
             var result = baseValue;

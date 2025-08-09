@@ -23,11 +23,35 @@ namespace StatForge.Editor
             var statTypeRect = new Rect(rect.x, rect.y, rect.width * 0.65f, rect.height);
             var valueRect = new Rect(rect.x + rect.width * 0.67f, rect.y, rect.width * 0.33f, rect.height);
 
+            EditorGUI.BeginChangeCheck();
             EditorGUI.PropertyField(statTypeRect, statTypeProperty, GUIContent.none);
+            
+            if (EditorGUI.EndChangeCheck())
+            {
+                if (statTypeProperty.objectReferenceValue != null)
+                {
+                    var statType = statTypeProperty.objectReferenceValue as StatType;
+                    if (statType != null)
+                    {
+                        baseValueProperty.floatValue = statType.DefaultValue;
+                        property.serializedObject.ApplyModifiedProperties();
+                    }
+                }
+                else
+                {
+                    baseValueProperty.floatValue = 0f;
+                    property.serializedObject.ApplyModifiedProperties();
+                }
+            }
 
             if (statTypeProperty.objectReferenceValue != null)
             {
                 var statType = statTypeProperty.objectReferenceValue as StatType;
+                if (Mathf.Approximately(baseValueProperty.floatValue, 0f) && statType != null && !Mathf.Approximately(statType.DefaultValue, 0f))
+                {
+                    baseValueProperty.floatValue = statType.DefaultValue;
+                    property.serializedObject.ApplyModifiedProperties();
+                }
 
                 EditorGUI.PropertyField(valueRect, baseValueProperty, GUIContent.none);
 
