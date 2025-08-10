@@ -117,7 +117,7 @@ namespace StatForge
             UnityEditor.EditorApplication.update += GlobalUpdateAllStats;
             #endif
             
-            Debug.Log("[StatForge] Sistema de auto-update global inicializado!");
+           // Debug.Log("[StatForge] Sistema de auto-update global inicializado!");
         }
         
         private static void GlobalUpdateAllStats()
