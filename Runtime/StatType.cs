@@ -63,7 +63,7 @@ namespace StatForge
         {
             return valueType switch
             {
-                StatValueType.Normal => ((int)System.Math.Round(value, System.MidpointRounding.AwayFromZero)).ToString(),
+                StatValueType.Normal => value.ToString("F2", CultureInfo.InvariantCulture),
                 StatValueType.Percentage => $"{value.ToString("F2", CultureInfo.InvariantCulture)}%",
                 StatValueType.Rate => $"{value.ToString("F1", CultureInfo.InvariantCulture)}/s",
                 _ => value.ToString("F1", CultureInfo.InvariantCulture)
