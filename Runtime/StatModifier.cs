@@ -227,13 +227,14 @@ namespace StatForge
         private static void ProcessDirtyStats()
         {
             if (dirtyStats.Count == 0) return;
-            
-            foreach (var stat in dirtyStats)
-            {
-                stat?.ForceUpdateModifiers(0f); // Delta time não importa com tempo absoluto
-            }
-            
+    
+            var statsToProcess = new List<Stat>(dirtyStats);
             dirtyStats.Clear();
+    
+            foreach (var stat in statsToProcess)
+            {
+                stat?.ForceUpdateModifiers(0f);
+            }
         }
         
         private static void CleanupExpiredEntries()
@@ -253,7 +254,6 @@ namespace StatForge
             }
         }
         
-        // 🎯 API PÚBLICA OTIMIZADA
         public static void RegisterTemporaryModifier(Stat stat, StatModifier modifier)
         {
             if (modifier.Duration != ModifierDuration.Temporary) return;
@@ -261,7 +261,6 @@ namespace StatForge
             var modData = GetFromPool();
             modData.Initialize(stat, modifier);
             
-            // ⚡ Adiciona por tempo de expiração
             var endTime = modifier.AbsoluteEndTime;
             if (!modifiersByExpiration.TryGetValue(endTime, out var modList))
             {
@@ -270,7 +269,6 @@ namespace StatForge
             }
             modList.Add(modData);
             
-            // ⚡ Adiciona por stat
             if (!modifiersByStat.TryGetValue(stat, out var statMods))
             {
                 statMods = new List<StatModifierData>();
@@ -304,7 +302,6 @@ namespace StatForge
             
             Debug.Log($"[StatForge] ⚡ Modificador {modifier.Id} expirou em {stat.Name} (INSTANTÂNEO)");
             
-            // ⚡ Remove da lista da stat
             if (modifiersByStat.TryGetValue(stat, out var statMods))
             {
                 statMods.Remove(modData);
@@ -312,7 +309,6 @@ namespace StatForge
                     modifiersByStat.Remove(stat);
             }
             
-            // ⚡ Marca stat como dirty para recálculo
             dirtyStats.Add(stat);
         }
         
@@ -326,8 +322,6 @@ namespace StatForge
                     modifiersByExpiration.Remove(endTime);
             }
         }
-        
-        // ⚡ OBJECT POOLING
         private static StatModifierData GetFromPool()
         {
             return modifierPool.Count > 0 ? modifierPool.Dequeue() : new StatModifierData();
@@ -336,17 +330,10 @@ namespace StatForge
         private static void ReturnToPool(StatModifierData modData)
         {
             modData.Reset();
-            if (modifierPool.Count < 1024) // Limita tamanho do pool
+            if (modifierPool.Count < 1024) 
                 modifierPool.Enqueue(modData);
         }
-        
-        // 🎯 COMPATIBILIDADE COM SISTEMA ATUAL
-        public static void UpdateTemporaryTracking(Stat stat, bool hasTemporary)
-        {
-            // Sistema novo não precisa desta funcionalidade
-            // Mantido apenas para compatibilidade
-        }
-        
+       
         public static bool IsTrackedForTemporary(Stat stat)
         {
             return modifiersByStat.ContainsKey(stat);

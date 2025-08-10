@@ -165,7 +165,6 @@ namespace StatForge
             var deltaTime = 0.016f;
     
             bool removedAny = false;
-            bool hasAnyTemporary = false;
     
             for (int i = modifiers.Count - 1; i >= 0; i--)
             {
@@ -174,8 +173,6 @@ namespace StatForge
         
                 if (modifier.Duration == ModifierDuration.Temporary)
                 {
-                    hasAnyTemporary = true;
-            
                     if (modifier.Update(deltaTime) || modifier.ShouldRemove())
                     {
                         if (debug)
@@ -197,8 +194,6 @@ namespace StatForge
                     }
                 }
             }
-    
-            StatModifierManager.UpdateTemporaryTracking(this, hasAnyTemporary);
     
             if (removedAny)
                 InvalidateCache();
