@@ -608,18 +608,19 @@ namespace StatForge
         public void ForceUpdateModifiers(float deltaTime)
         {
             bool removedAny = false;
-            
+    
             for (int i = modifiers.Count - 1; i >= 0; i--)
             {
                 var modifier = modifiers[i];
                 if (modifier != null && modifier.Update(deltaTime))
                 {
+                    Debug.Log($"[StatForge]  Modificador {modifier.Id} expirou em {Name} (FORÇA GLOBAL)");
                     modifiers.RemoveAt(i);
                     OnModifierRemoved?.Invoke(this, modifier);
                     removedAny = true;
                 }
             }
-            
+    
             if (removedAny)
             {
                 modifierCacheValid = false;

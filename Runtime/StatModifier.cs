@@ -100,7 +100,7 @@ namespace StatForge
     {
         private static readonly List<Stat> allStatsWithTemporaryModifiers = new List<Stat>();
         private static bool globalUpdateInitialized = false;
-        private static float lastUpdateTime = 0f;
+        private static double lastUpdateTime = 0;
         
         static StatModifierManager()
         {
@@ -115,17 +115,23 @@ namespace StatForge
             
             #if UNITY_EDITOR
             UnityEditor.EditorApplication.update += GlobalUpdateAllStats;
+            lastUpdateTime = UnityEditor.EditorApplication.timeSinceStartup;
             #endif
             
-           // Debug.Log("[StatForge] Sistema de auto-update global inicializado!");
+            Debug.Log("[StatForge] Sistema de auto-update global inicializado!");
         }
         
         private static void GlobalUpdateAllStats()
         {
             if (allStatsWithTemporaryModifiers.Count == 0) return;
             
-            var currentTime = Time.realtimeSinceStartup;
-            var deltaTime = currentTime - lastUpdateTime;
+            #if UNITY_EDITOR
+            var currentTime = UnityEditor.EditorApplication.timeSinceStartup;
+            #else
+            var currentTime = Time.realtimeSinceStartupAsDouble;
+            #endif
+            
+            var deltaTime = (float)(currentTime - lastUpdateTime);
             lastUpdateTime = currentTime;
             
             if (deltaTime <= 0f || deltaTime > 1f) 
@@ -152,42 +158,8 @@ namespace StatForge
         {
             try
             {
-                var modifiers = stat.Modifiers as List<IStatModifier>;
-                if (modifiers == null) return;
-                
-                bool removedAny = false;
-                bool hasAnyTemporary = false;
-                
-                for (int i = modifiers.Count - 1; i >= 0; i--)
-                {
-                    var modifier = modifiers[i];
-                    if (modifier == null) continue;
-                    
-                    if (modifier.Duration == ModifierDuration.Temporary)
-                    {
-                        hasAnyTemporary = true;
-                        
-                        if (modifier.Update(deltaTime) || modifier.ShouldRemove())
-                        {
-                            Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {stat.Name} (update forçado)");
-                            
-                            stat.RemoveModifier(modifier);
-                            removedAny = true;
-                        }
-                    }
-                    else if (modifier.Duration == ModifierDuration.Conditional)
-                    {
-                        if (modifier.ShouldRemove())
-                        {
-                            Debug.Log($"[StatForge] Modificador condicional {modifier.Id} removido de {stat.Name} (update forçado)");
-                            
-                            stat.RemoveModifier(modifier);
-                            removedAny = true;
-                        }
-                    }
-                }
-                
-                UpdateTemporaryTracking(stat, hasAnyTemporary);
+                // ✅ CORREÇÃO: Chama método público que atualiza modificadores
+                stat.ForceUpdateModifiers(deltaTime);
             }
             catch (Exception ex)
             {
