@@ -18,7 +18,6 @@ namespace StatForge
         private Stat targetStat;
         private Func<bool> removalCondition;
         private object tag;
-        private double startTime;
         
         public string Id => id;
         public Stat TargetStat => targetStat;
@@ -44,7 +43,6 @@ namespace StatForge
             this.remainingTime = time;
             this.source = source ?? "";
             this.tag = tag;
-            this.startTime = GetCurrentTime();
         }
         
         public bool Update(float deltaTime)
@@ -88,11 +86,6 @@ namespace StatForge
             return clone;
         }
         
-        private static double GetCurrentTime()
-        {
-            return Application.isPlaying ? Time.realtimeSinceStartupAsDouble : 0;
-        }
-        
         public override string ToString()
         {
             var sign = type == ModifierType.Subtractive ? "-" : "+";
@@ -108,6 +101,7 @@ namespace StatForge
         private static readonly HashSet<Stat> trackedStats = new();
         private static StatUpdateManager updateManager;
         private static bool initialized;
+        internal static bool isShuttingDown;
         
         static StatModifierManager()
         {
@@ -118,14 +112,23 @@ namespace StatForge
         {
             if (initialized) return;
             initialized = true;
+            isShuttingDown = false;
             
             CreateUpdateManager();
             
-            Application.quitting += ClearAllCaches;
+            Application.quitting += OnApplicationQuitting;
+        }
+        
+        private static void OnApplicationQuitting()
+        {
+            isShuttingDown = true;
+            ClearAllCaches();
         }
         
         private static void CreateUpdateManager()
         {
+            if (isShuttingDown) return;
+            
             var go = new GameObject("[StatForge] Update Manager")
             {
                 hideFlags = HideFlags.HideAndDontSave
@@ -139,7 +142,7 @@ namespace StatForge
         
         public static void RegisterTemporaryModifier(Stat stat, IStatModifier modifier)
         {
-            if (stat == null || modifier?.Duration != ModifierDuration.Temporary) return;
+            if (stat == null || modifier?.Duration != ModifierDuration.Temporary || isShuttingDown) return;
             
             if (!temporaryModifiers.TryGetValue(stat, out var modifiers))
             {
@@ -166,16 +169,19 @@ namespace StatForge
         
         public static void UpdateAllTrackedStats()
         {
-            if (!Application.isPlaying) return;
+            if (!Application.isPlaying || isShuttingDown) return;
             
             var deltaTime = Time.deltaTime;
-            var statsToRemove = new List<Stat>();
+            var validStatsToRemove = new List<Stat>();
+            bool foundNullStats = false;
             
-            foreach (var stat in trackedStats)
+            var trackedStatsCopy = new List<Stat>(trackedStats);
+            
+            foreach (var stat in trackedStatsCopy)
             {
-                if (stat == null)
+                if (ReferenceEquals(stat, null))
                 {
-                    statsToRemove.Add(stat);
+                    foundNullStats = true;
                     continue;
                 }
                 
@@ -183,13 +189,36 @@ namespace StatForge
                 
                 if (!stat.HasModifiers || !temporaryModifiers.ContainsKey(stat))
                 {
-                    statsToRemove.Add(stat);
+                    validStatsToRemove.Add(stat);
                 }
             }
             
-            foreach (var stat in statsToRemove)
+            if (foundNullStats)
+            {
+                CleanupNullReferences();
+            }
+            
+            foreach (var stat in validStatsToRemove)
             {
                 UnregisterStat(stat);
+            }
+        }
+        
+        private static void CleanupNullReferences()
+        {
+            trackedStats.RemoveWhere(stat => ReferenceEquals(stat, null));
+            var keysToRemove = new List<Stat>();
+            foreach (var kvp in temporaryModifiers)
+            {
+                if (ReferenceEquals(kvp.Key, null))
+                {
+                    keysToRemove.Add(kvp.Key);
+                }
+            }
+            
+            foreach (var key in keysToRemove)
+            {
+                temporaryModifiers.Remove(key);
             }
         }
         
@@ -198,15 +227,38 @@ namespace StatForge
             return $"Tracked stats: {trackedStats.Count}";
         }
         
+        internal static void ClearDataOnly()
+        {
+            temporaryModifiers.Clear();
+            trackedStats.Clear();
+        }
+        
         public static void ClearAllCaches()
         {
             temporaryModifiers.Clear();
             trackedStats.Clear();
             
-            if (updateManager != null)
+            if (updateManager != null && !ReferenceEquals(updateManager, null))
             {
-                UnityEngine.Object.DestroyImmediate(updateManager.gameObject);
-                updateManager = null;
+                try
+                {
+                    if (Application.isPlaying)
+                    {
+                        UnityEngine.Object.Destroy(updateManager.gameObject);
+                    }
+                    else
+                    {
+                        UnityEngine.Object.DestroyImmediate(updateManager.gameObject);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[StatForge] Could not destroy update manager: {ex.GetType().Name}");
+                }
+                finally
+                {
+                    updateManager = null;
+                }
             }
             
             initialized = false;
@@ -215,14 +267,25 @@ namespace StatForge
     
     internal class StatUpdateManager : MonoBehaviour
     {
+        private bool hasBeenDestroyed;
+        
         private void Update()
         {
-            StatModifierManager.UpdateAllTrackedStats();
+            if (!hasBeenDestroyed)
+            {
+                StatModifierManager.UpdateAllTrackedStats();
+            }
         }
         
         private void OnDestroy()
         {
-            StatModifierManager.ClearAllCaches();
+            if (hasBeenDestroyed) return;
+            
+            hasBeenDestroyed = true;
+            if (!StatModifierManager.isShuttingDown)
+            {
+                StatModifierManager.ClearDataOnly();
+            }
         }
     }
 }

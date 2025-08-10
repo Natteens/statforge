@@ -622,9 +622,7 @@ namespace StatForge
         
         public void ForceUpdateModifiers(float deltaTime)
         {
-            if (!Application.isPlaying) return;
-            
-            bool removedAny = false;
+           bool removedAny = false;
     
             for (int i = modifiers.Count - 1; i >= 0; i--)
             {

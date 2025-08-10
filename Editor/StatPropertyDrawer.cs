@@ -30,13 +30,30 @@ namespace StatForge.Editor
                     var stat = GetStatFromProperty(property);
                     if (stat != null && (stat.HasModifiers || stat.IsDirty))
                     {
-                        EditorApplication.delayCall += () => 
+                        // Store references safely for the delayed call
+                        var serializedObject = property.serializedObject;
+                        var targetObject = serializedObject?.targetObject;
+                        
+                        if (serializedObject != null && targetObject != null)
                         {
-                            if (property.serializedObject?.targetObject != null)
+                            EditorApplication.delayCall += () => 
                             {
-                                EditorUtility.SetDirty(property.serializedObject.targetObject);
-                            }
-                        };
+                                try
+                                {
+                                    // Double-check that objects are still valid
+                                    if (serializedObject != null && targetObject != null && 
+                                        !ReferenceEquals(targetObject, null))
+                                    {
+                                        EditorUtility.SetDirty(targetObject);
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    // Silently ignore - object was likely destroyed
+                                    Debug.LogWarning($"[StatForge] Could not mark object dirty (likely destroyed): {ex.GetType().Name}");
+                                }
+                            };
+                        }
                     }
                 }
             }
@@ -286,13 +303,27 @@ namespace StatForge.Editor
                     baseValueProperty.floatValue = 0f;
                 }
                 
-                EditorApplication.delayCall += () =>
+                // Store references safely for the delayed call
+                var serializedObject = baseValueProperty.serializedObject;
+                
+                if (serializedObject != null)
                 {
-                    if (baseValueProperty.serializedObject != null)
+                    EditorApplication.delayCall += () =>
                     {
-                        baseValueProperty.serializedObject.ApplyModifiedProperties();
-                    }
-                };
+                        try
+                        {
+                            if (serializedObject != null && !ReferenceEquals(serializedObject.targetObject, null))
+                            {
+                                serializedObject.ApplyModifiedProperties();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // Silently ignore - object was likely destroyed
+                            Debug.LogWarning($"[StatForge] Could not apply properties (likely destroyed): {ex.GetType().Name}");
+                        }
+                    };
+                }
             }
             catch (Exception ex)
             {
@@ -312,13 +343,27 @@ namespace StatForge.Editor
             {
                 baseValueProperty.floatValue = statType.DefaultValue;
                 
-                EditorApplication.delayCall += () =>
+                // Store references safely for the delayed call
+                var serializedObject = baseValueProperty.serializedObject;
+                
+                if (serializedObject != null)
                 {
-                    if (baseValueProperty.serializedObject != null)
+                    EditorApplication.delayCall += () =>
                     {
-                        baseValueProperty.serializedObject.ApplyModifiedProperties();
-                    }
-                };
+                        try
+                        {
+                            if (serializedObject != null && !ReferenceEquals(serializedObject.targetObject, null))
+                            {
+                                serializedObject.ApplyModifiedProperties();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // Silently ignore - object was likely destroyed
+                            Debug.LogWarning($"[StatForge] Could not apply properties (likely destroyed): {ex.GetType().Name}");
+                        }
+                    };
+                }
             }
             catch (Exception ex)
             {
