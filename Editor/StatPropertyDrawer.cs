@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System;
 using System.Reflection;
 using UnityEditor;
@@ -13,8 +12,6 @@ namespace StatForge.Editor
         private const float SPACING = 2f;
         private const float LABEL_WIDTH_RATIO = 0.65f;
         private const float VALUE_WIDTH_RATIO = 0.33f;
-        private static double lastRepaintTime;
-        private const double REPAINT_INTERVAL = 0.1;
         
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
@@ -30,24 +27,16 @@ namespace StatForge.Editor
                 
                 if (Application.isPlaying)
                 {
-                    var currentTime = EditorApplication.timeSinceStartup;
-                    if (currentTime - lastRepaintTime > REPAINT_INTERVAL)
+                    var stat = GetStatFromProperty(property);
+                    if (stat != null && (stat.HasModifiers || stat.IsDirty))
                     {
-                        lastRepaintTime = currentTime;
-                        
-                        var stat = GetStatFromProperty(property);
-                        if (stat != null && (stat.HasModifiers || stat.IsDirty))
+                        EditorApplication.delayCall += () => 
                         {
-                            stat.ForceUpdateModifiers(0.016f); 
-                            
-                            EditorApplication.delayCall += () => 
+                            if (property.serializedObject?.targetObject != null)
                             {
-                                if (property.serializedObject?.targetObject != null)
-                                {
-                                    EditorUtility.SetDirty(property.serializedObject.targetObject);
-                                }
-                            };
-                        }
+                                EditorUtility.SetDirty(property.serializedObject.targetObject);
+                            }
+                        };
                     }
                 }
             }
@@ -167,7 +156,7 @@ namespace StatForge.Editor
             {
                 normal = { textColor = Color.red }
             };
-            EditorGUI.LabelField(rect, "⚠ Assign a StatType", style);
+            EditorGUI.LabelField(rect, "Assign a StatType", style);
         }
         
         private void DrawRuntimeInfo(Rect rect, SerializedProperty property)
@@ -183,7 +172,7 @@ namespace StatForge.Editor
                     };
                     
                     var currentValue = stat.Value; 
-                    var displayText = $"🔄 Runtime: {stat.FormattedValue}";
+                    var displayText = $"Runtime: {stat.FormattedValue}";
                     
                     if (stat.HasModifiers)
                     {
@@ -193,11 +182,6 @@ namespace StatForge.Editor
                     if (stat.HasFormula)
                     {
                         displayText += " [+formula]";
-                    }
-                    
-                    if (StatModifierManager.IsTrackedForTemporary(stat))
-                    {
-                        displayText += " ";
                     }
                     
                     EditorGUI.LabelField(rect, displayText, style);
@@ -223,7 +207,7 @@ namespace StatForge.Editor
             try
             {
                 var formattedValue = statType.FormatValue(baseValue);
-                var infoText = $"📋 {statType.ShortName} | Preview: {formattedValue}";
+                var infoText = $"{statType.ShortName} | Preview: {formattedValue}";
                 
                 if (statType.HasFormula)
                 {
@@ -244,7 +228,7 @@ namespace StatForge.Editor
             {
                 normal = { textColor = Color.red }
             };
-            EditorGUI.LabelField(rect, $"⚠ {message}", style);
+            EditorGUI.LabelField(rect, $"Error: {message}", style);
         }
         
         private string GetPropertyPath(SerializedProperty property)
@@ -354,6 +338,11 @@ namespace StatForge.Editor
     {
         public override void OnInspectorGUI()
         {
+            if (Application.isPlaying)
+            {
+                serializedObject.Update();
+            }
+            
             DrawDefaultInspector();
             
             if (Application.isPlaying)
@@ -383,4 +372,3 @@ namespace StatForge.Editor
         }
     }
 }
-#endif

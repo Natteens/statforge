@@ -12,13 +12,13 @@ namespace StatForge
         [SerializeField] private StatType statType;
         [SerializeField] private float baseValue;
         [SerializeField] private string statId;
-        [SerializeField] private bool debug = false;
+        [SerializeField] private bool debug;
         
         private float cachedValue;
         private bool needsRecalculation = true;
         private bool isDirty = true;
         
-        private List<IStatModifier> modifiers = new List<IStatModifier>();
+        private List<IStatModifier> modifiers = new();
         
         private static readonly Dictionary<string, StatRegistry> registriesByStatId = new(512);
         private static readonly Dictionary<string, List<Stat>> dependentsCache = new(256);
@@ -40,6 +40,7 @@ namespace StatForge
         [NonSerialized] private float percentageCache;
         [NonSerialized] private IStatModifier overrideCache;
         [NonSerialized] private bool modifierCacheValid;
+        [NonSerialized] private double lastUpdateTime;
         
         public StatType StatType => statType;
         public string Name => statType ? statType.DisplayName : "None";
@@ -82,7 +83,8 @@ namespace StatForge
                 RegisterIfNeeded();
                 EnsureDefaultValueIfNeeded();
                 
-                UpdateModifiersInternal();
+                if (Application.isPlaying)
+                    UpdateModifiersInternal();
                 
                 if (needsRecalculation || isDirty || Math.Abs(lastCalculatedBaseValue - baseValue) > float.Epsilon)
                     RecalculateValue();
@@ -154,6 +156,7 @@ namespace StatForge
             lastFormulaResult = 0f;
             ownerPrefix = "Global";
             isNotifying = false;
+            lastUpdateTime = 0;
             
             RegisterIfNeeded();
         }
@@ -162,7 +165,12 @@ namespace StatForge
         {
             if (modifiers.Count == 0) return;
 
-            var deltaTime = 0.016f;
+            var currentTime = Time.realtimeSinceStartupAsDouble;
+            var deltaTime = (float)(currentTime - lastUpdateTime);
+            lastUpdateTime = currentTime;
+
+            if (deltaTime <= 0) deltaTime = Time.deltaTime;
+
             bool removedAny = false;
 
             for (int i = modifiers.Count - 1; i >= 0; i--)
@@ -175,7 +183,7 @@ namespace StatForge
                     if (modifier.Update(deltaTime) || modifier.ShouldRemove())
                     {
                         if (debug)
-                            Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {Name} (acesso normal)");
+                            Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {Name}");
                         modifiers.RemoveAt(i);
                         OnModifierRemoved?.Invoke(this, modifier);
                         removedAny = true;
@@ -186,7 +194,7 @@ namespace StatForge
                     if (modifier.ShouldRemove())
                     {
                         if (debug)
-                            Debug.Log($"[StatForge] Modificador condicional {modifier.Id} removido de {Name} (acesso normal)");
+                            Debug.Log($"[StatForge] Modificador condicional {modifier.Id} removido de {Name}");
                         modifiers.RemoveAt(i);
                         OnModifierRemoved?.Invoke(this, modifier);
                         removedAny = true;
@@ -197,10 +205,6 @@ namespace StatForge
             if (removedAny)
             {
                 InvalidateCache();
-                if (needsRecalculation || isDirty)
-                {
-                    RecalculateValue();
-                }
             }
         }
         
@@ -245,6 +249,7 @@ namespace StatForge
             }
             catch
             {
+                //ignore
             }
 
             return "Global";
@@ -412,7 +417,7 @@ namespace StatForge
                 
             try
             {
-                float result = 0f;
+                float result;
                 
                 if (parentContainer != null)
                 {
@@ -617,6 +622,8 @@ namespace StatForge
         
         public void ForceUpdateModifiers(float deltaTime)
         {
+            if (!Application.isPlaying) return;
+            
             bool removedAny = false;
     
             for (int i = modifiers.Count - 1; i >= 0; i--)
@@ -625,7 +632,7 @@ namespace StatForge
                 if (modifier != null && modifier.Update(deltaTime))
                 {
                     if (debug)
-                        Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {Name} (FORÇA GLOBAL)");
+                        Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {Name}");
                     modifiers.RemoveAt(i);
                     OnModifierRemoved?.Invoke(this, modifier);
                     removedAny = true;
