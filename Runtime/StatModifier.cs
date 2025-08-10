@@ -15,6 +15,7 @@ namespace StatForge
         [SerializeField] private ModifierPriority priority;
         [SerializeField] private float remainingTime;
         [SerializeField] private string source;
+        [SerializeField] private double startTime; // ⚡ Tempo absoluto para precisão
         
         private Stat targetStat;
         private Func<bool> removalCondition;
@@ -31,6 +32,9 @@ namespace StatForge
         public string Source => source;
         public object Tag => tag;
         
+        // ⚡ Nova propriedade para tempo absoluto
+        public double AbsoluteEndTime { get; private set; }
+        
         public StatModifier(Stat targetStat, float value, ModifierType type = ModifierType.Additive, 
                            ModifierDuration duration = ModifierDuration.Permanent, float time = 0f,
                            ModifierPriority priority = ModifierPriority.Normal, string source = "", object tag = null)
@@ -44,13 +48,22 @@ namespace StatForge
             this.remainingTime = time;
             this.source = source ?? "";
             this.tag = tag;
+            
+            // ⚡ Calcula tempo absoluto de expiração
+            if (duration == ModifierDuration.Temporary)
+            {
+                this.startTime = StatModifierManager.GetCurrentTime();
+                this.AbsoluteEndTime = this.startTime + time;
+            }
         }
         
         public bool Update(float deltaTime)
         {
-            if (duration == ModifierDuration.Temporary && remainingTime > 0f)
+            if (duration == ModifierDuration.Temporary)
             {
-                remainingTime -= deltaTime;
+                // ⚡ Usa tempo absoluto para precisão perfeita
+                var currentTime = StatModifierManager.GetCurrentTime();
+                remainingTime = (float)(AbsoluteEndTime - currentTime);
                 return remainingTime <= 0f;
             }
             
@@ -96,11 +109,30 @@ namespace StatForge
         }
     }
     
+    // 🚀 SISTEMA GLOBAL ULTRA-OTIMIZADO
     public static class StatModifierManager
     {
-        private static readonly List<Stat> allStatsWithTemporaryModifiers = new List<Stat>();
+        // ⚡ Pool de objetos para evitar GC
+        private static readonly Queue<StatModifierData> modifierPool = new Queue<StatModifierData>(1024);
+        
+        // ⚡ Estruturas otimizadas
+        private static readonly SortedDictionary<double, List<StatModifierData>> modifiersByExpiration = new();
+        private static readonly Dictionary<Stat, List<StatModifierData>> modifiersByStat = new();
+        private static readonly HashSet<Stat> dirtyStats = new HashSet<Stat>();
+        
         private static bool globalUpdateInitialized = false;
-        private static double lastUpdateTime = 0;
+        private static StatUpdateManager updateManager;
+        private static double lastCleanupTime = 0;
+        
+        // ⚡ Timing preciso
+        public static double GetCurrentTime()
+        {
+            #if UNITY_EDITOR
+            return UnityEditor.EditorApplication.timeSinceStartup;
+            #else
+            return Time.realtimeSinceStartupAsDouble;
+            #endif
+        }
         
         static StatModifierManager()
         {
@@ -113,97 +145,259 @@ namespace StatForge
             
             globalUpdateInitialized = true;
             
-            #if UNITY_EDITOR
-            UnityEditor.EditorApplication.update += GlobalUpdateAllStats;
-            lastUpdateTime = UnityEditor.EditorApplication.timeSinceStartup;
-            #endif
+            // 🚀 Cria manager universal (Editor + Build)
+            CreateUpdateManager();
             
-            Debug.Log("[StatForge] Sistema de auto-update global inicializado!");
+            Debug.Log("[StatForge] 🚀 Sistema Ultra-Otimizado inicializado!");
         }
         
-        private static void GlobalUpdateAllStats()
+        private static void CreateUpdateManager()
         {
-            if (allStatsWithTemporaryModifiers.Count == 0) return;
-            
             #if UNITY_EDITOR
-            var currentTime = UnityEditor.EditorApplication.timeSinceStartup;
-            #else
-            var currentTime = Time.realtimeSinceStartupAsDouble;
+            // No Editor: usa EditorApplication.update
+            UnityEditor.EditorApplication.update += GlobalUpdateAllStats;
             #endif
             
-            var deltaTime = (float)(currentTime - lastUpdateTime);
-            lastUpdateTime = currentTime;
-            
-            if (deltaTime <= 0f || deltaTime > 1f) 
-                deltaTime = 0.016f;
-            
-            for (int i = allStatsWithTemporaryModifiers.Count - 1; i >= 0; i--)
+            // ⚡ Sempre cria MonoBehaviour para compatibilidade total
+            var go = new GameObject("[StatForge] Ultra Manager")
             {
-                if (i < allStatsWithTemporaryModifiers.Count)
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            
+            UnityEngine.Object.DontDestroyOnLoad(go);
+            updateManager = go.AddComponent<StatUpdateManager>();
+            updateManager.enabled = !Application.isEditor; // Só ativo no build
+        }
+        
+        // 🚀 UPDATE GLOBAL ULTRA-OTIMIZADO
+        public static void GlobalUpdateAllStats()
+        {
+            var currentTime = GetCurrentTime();
+            
+            // ⚡ Cleanup automático a cada 5 segundos
+            if (currentTime - lastCleanupTime > 5.0)
+            {
+                CleanupExpiredEntries();
+                lastCleanupTime = currentTime;
+            }
+            
+            // ⚡ Processa apenas modificadores que expiraram
+            ProcessExpiredModifiers(currentTime);
+            
+            // ⚡ Força recálculo apenas de stats que mudaram
+            ProcessDirtyStats();
+        }
+        
+        private static void ProcessExpiredModifiers(double currentTime)
+        {
+            if (modifiersByExpiration.Count == 0) return;
+            
+            var expiredTimes = new List<double>();
+            
+            // ⚡ Coleta todos os tempos expirados
+            foreach (var kvp in modifiersByExpiration)
+            {
+                if (kvp.Key <= currentTime)
+                    expiredTimes.Add(kvp.Key);
+                else
+                    break; // SortedDictionary = já está ordenado
+            }
+            
+            // ⚡ Processa modificadores expirados
+            foreach (var expiredTime in expiredTimes)
+            {
+                if (modifiersByExpiration.TryGetValue(expiredTime, out var expiredModifiers))
                 {
-                    var stat = allStatsWithTemporaryModifiers[i];
-                    if (stat != null)
+                    foreach (var modData in expiredModifiers)
                     {
-                        ForceUpdateStat(stat, deltaTime);
+                        RemoveModifierFromStat(modData);
                     }
-                    else
+                    
+                    modifiersByExpiration.Remove(expiredTime);
+                    
+                    // ⚡ Retorna objetos para o pool
+                    foreach (var modData in expiredModifiers)
                     {
-                        allStatsWithTemporaryModifiers.RemoveAt(i);
+                        ReturnToPool(modData);
                     }
                 }
             }
         }
         
-        private static void ForceUpdateStat(Stat stat, float deltaTime)
+        private static void ProcessDirtyStats()
         {
-            try
+            if (dirtyStats.Count == 0) return;
+            
+            foreach (var stat in dirtyStats)
             {
-                // ✅ CORREÇÃO: Chama método público que atualiza modificadores
-                stat.ForceUpdateModifiers(deltaTime);
+                stat?.ForceUpdateModifiers(0f); // Delta time não importa com tempo absoluto
             }
-            catch (Exception ex)
+            
+            dirtyStats.Clear();
+        }
+        
+        private static void CleanupExpiredEntries()
+        {
+            var currentTime = GetCurrentTime();
+            var toRemove = new List<double>();
+            
+            foreach (var kvp in modifiersByExpiration)
             {
-                Debug.LogError($"[StatForge] Erro no update forçado de {stat.Name}: {ex}");
+                if (kvp.Key < currentTime - 10.0) // Remove entradas muito antigas
+                    toRemove.Add(kvp.Key);
+            }
+            
+            foreach (var time in toRemove)
+            {
+                modifiersByExpiration.Remove(time);
             }
         }
         
-        public static void RegisterStat(Stat stat)
+        // 🎯 API PÚBLICA OTIMIZADA
+        public static void RegisterTemporaryModifier(Stat stat, StatModifier modifier)
         {
+            if (modifier.Duration != ModifierDuration.Temporary) return;
+            
+            var modData = GetFromPool();
+            modData.Initialize(stat, modifier);
+            
+            // ⚡ Adiciona por tempo de expiração
+            var endTime = modifier.AbsoluteEndTime;
+            if (!modifiersByExpiration.TryGetValue(endTime, out var modList))
+            {
+                modList = new List<StatModifierData>();
+                modifiersByExpiration[endTime] = modList;
+            }
+            modList.Add(modData);
+            
+            // ⚡ Adiciona por stat
+            if (!modifiersByStat.TryGetValue(stat, out var statMods))
+            {
+                statMods = new List<StatModifierData>();
+                modifiersByStat[stat] = statMods;
+            }
+            statMods.Add(modData);
+            
+            Debug.Log($"[StatForge] ⚡ Modificador {modifier.Id} registrado para expirar em {modifier.RemainingTime:F2}s");
         }
         
+        public static void UnregisterStat(Stat stat)
+        {
+            if (modifiersByStat.TryGetValue(stat, out var modifiers))
+            {
+                foreach (var modData in modifiers)
+                {
+                    RemoveModifierFromExpiration(modData);
+                    ReturnToPool(modData);
+                }
+                
+                modifiersByStat.Remove(stat);
+            }
+            
+            dirtyStats.Remove(stat);
+        }
+        
+        private static void RemoveModifierFromStat(StatModifierData modData)
+        {
+            var stat = modData.Stat;
+            var modifier = modData.Modifier;
+            
+            Debug.Log($"[StatForge] ⚡ Modificador {modifier.Id} expirou em {stat.Name} (INSTANTÂNEO)");
+            
+            // ⚡ Remove da lista da stat
+            if (modifiersByStat.TryGetValue(stat, out var statMods))
+            {
+                statMods.Remove(modData);
+                if (statMods.Count == 0)
+                    modifiersByStat.Remove(stat);
+            }
+            
+            // ⚡ Marca stat como dirty para recálculo
+            dirtyStats.Add(stat);
+        }
+        
+        private static void RemoveModifierFromExpiration(StatModifierData modData)
+        {
+            var endTime = modData.Modifier.AbsoluteEndTime;
+            if (modifiersByExpiration.TryGetValue(endTime, out var modList))
+            {
+                modList.Remove(modData);
+                if (modList.Count == 0)
+                    modifiersByExpiration.Remove(endTime);
+            }
+        }
+        
+        // ⚡ OBJECT POOLING
+        private static StatModifierData GetFromPool()
+        {
+            return modifierPool.Count > 0 ? modifierPool.Dequeue() : new StatModifierData();
+        }
+        
+        private static void ReturnToPool(StatModifierData modData)
+        {
+            modData.Reset();
+            if (modifierPool.Count < 1024) // Limita tamanho do pool
+                modifierPool.Enqueue(modData);
+        }
+        
+        // 🎯 COMPATIBILIDADE COM SISTEMA ATUAL
         public static void UpdateTemporaryTracking(Stat stat, bool hasTemporary)
         {
-            if (hasTemporary)
-            {
-                if (!allStatsWithTemporaryModifiers.Contains(stat))
-                {
-                    allStatsWithTemporaryModifiers.Add(stat);
-                    Debug.Log($"[StatForge] Stat {stat.Name} adicionado ao tracking global");
-                }
-            }
-            else
-            {
-                if (allStatsWithTemporaryModifiers.Remove(stat))
-                {
-                    Debug.Log($"[StatForge] Stat {stat.Name} removido do tracking global");
-                }
-            }
+            // Sistema novo não precisa desta funcionalidade
+            // Mantido apenas para compatibilidade
         }
         
         public static bool IsTrackedForTemporary(Stat stat)
         {
-            return allStatsWithTemporaryModifiers.Contains(stat);
+            return modifiersByStat.ContainsKey(stat);
         }
         
         public static string GetGlobalDebugInfo()
         {
-            return $"[StatForge Global] Stats com modificadores temporários: {allStatsWithTemporaryModifiers.Count} | " +
-                   $"Nomes: [{string.Join(", ", allStatsWithTemporaryModifiers.Select(s => s.Name))}]";
+            var trackedStats = modifiersByStat.Count;
+            var totalModifiers = modifiersByExpiration.Values.Sum(list => list.Count);
+            
+            return $"[StatForge Ultra] Stats: {trackedStats} | Modificadores ativos: {totalModifiers} | " +
+                   $"Pool disponível: {modifierPool.Count}";
         }
         
         public static void ClearAllCaches()
         {
-            allStatsWithTemporaryModifiers.Clear();
+            modifiersByExpiration.Clear();
+            modifiersByStat.Clear();
+            dirtyStats.Clear();
+            modifierPool.Clear();
+        }
+    }
+    
+    internal class StatModifierData
+    {
+        public Stat Stat { get; private set; }
+        public StatModifier Modifier { get; private set; }
+        
+        public void Initialize(Stat stat, StatModifier modifier)
+        {
+            Stat = stat;
+            Modifier = modifier;
+        }
+        
+        public void Reset()
+        {
+            Stat = null;
+            Modifier = null;
+        }
+    }
+    
+    internal class StatUpdateManager : MonoBehaviour
+    {
+        private void Update()
+        {
+            StatModifierManager.GlobalUpdateAllStats();
+        }
+        
+        private void OnDestroy()
+        {
+            StatModifierManager.ClearAllCaches();
         }
     }
 }
