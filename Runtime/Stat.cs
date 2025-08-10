@@ -161,16 +161,15 @@ namespace StatForge
         private void UpdateModifiersInternal()
         {
             if (modifiers.Count == 0) return;
-    
+
             var deltaTime = 0.016f;
-    
             bool removedAny = false;
-    
+
             for (int i = modifiers.Count - 1; i >= 0; i--)
             {
                 var modifier = modifiers[i];
                 if (modifier == null) continue;
-        
+
                 if (modifier.Duration == ModifierDuration.Temporary)
                 {
                     if (modifier.Update(deltaTime) || modifier.ShouldRemove())
@@ -194,9 +193,15 @@ namespace StatForge
                     }
                 }
             }
-    
+
             if (removedAny)
+            {
                 InvalidateCache();
+                if (needsRecalculation || isDirty)
+                {
+                    RecalculateValue();
+                }
+            }
         }
         
         private void RegisterIfNeeded()

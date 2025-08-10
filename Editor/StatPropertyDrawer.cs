@@ -13,6 +13,8 @@ namespace StatForge.Editor
         private const float SPACING = 2f;
         private const float LABEL_WIDTH_RATIO = 0.65f;
         private const float VALUE_WIDTH_RATIO = 0.33f;
+        private static double lastRepaintTime;
+        private const double REPAINT_INTERVAL = 0.1;
         
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
@@ -25,6 +27,29 @@ namespace StatForge.Editor
             try
             {
                 DrawStatProperty(position, property, label);
+                
+                if (Application.isPlaying)
+                {
+                    var currentTime = EditorApplication.timeSinceStartup;
+                    if (currentTime - lastRepaintTime > REPAINT_INTERVAL)
+                    {
+                        lastRepaintTime = currentTime;
+                        
+                        var stat = GetStatFromProperty(property);
+                        if (stat != null && (stat.HasModifiers || stat.IsDirty))
+                        {
+                            stat.ForceUpdateModifiers(0.016f); 
+                            
+                            EditorApplication.delayCall += () => 
+                            {
+                                if (property.serializedObject?.targetObject != null)
+                                {
+                                    EditorUtility.SetDirty(property.serializedObject.targetObject);
+                                }
+                            };
+                        }
+                    }
+                }
             }
             catch (ExitGUIException)
             {
@@ -157,6 +182,7 @@ namespace StatForge.Editor
                         normal = { textColor = new Color(0.2f, 0.8f, 0.2f) }
                     };
                     
+                    var currentValue = stat.Value; 
                     var displayText = $"🔄 Runtime: {stat.FormattedValue}";
                     
                     if (stat.HasModifiers)
@@ -167,6 +193,11 @@ namespace StatForge.Editor
                     if (stat.HasFormula)
                     {
                         displayText += " [+formula]";
+                    }
+                    
+                    if (StatModifierManager.IsTrackedForTemporary(stat))
+                    {
+                        displayText += " ";
                     }
                     
                     EditorGUI.LabelField(rect, displayText, style);
@@ -228,7 +259,6 @@ namespace StatForge.Editor
                 var targetObject = property.serializedObject.targetObject;
                 if (targetObject == null) return null;
                 
-                // Parse do property path para navegar pela hierarquia
                 var pathParts = property.propertyPath.Split('.');
                 object currentObject = targetObject;
                 
@@ -315,6 +345,41 @@ namespace StatForge.Editor
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
             return (LINE_HEIGHT * 3) + (SPACING * 3);
+        }
+    }
+    
+    [CanEditMultipleObjects]
+    [CustomEditor(typeof(MonoBehaviour), true)]
+    public class StatComponentInspector : UnityEditor.Editor
+    {
+        public override void OnInspectorGUI()
+        {
+            DrawDefaultInspector();
+            
+            if (Application.isPlaying)
+            {
+                var hasStats = HasStatsInTarget();
+                if (hasStats)
+                {
+                    Repaint();
+                }
+            }
+        }
+        
+        private bool HasStatsInTarget()
+        {
+            var targetType = target.GetType();
+            var fields = targetType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            
+            foreach (var field in fields)
+            {
+                if (field.FieldType == typeof(Stat))
+                {
+                    return true;
+                }
+            }
+            
+            return false;
         }
     }
 }
