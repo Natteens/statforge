@@ -131,7 +131,6 @@ namespace StatForge.Tests
             normalType.ValueType = StatValueType.Normal;
             var normalStat = new Stat(normalType, 25.7f);
             Assert.AreEqual("26", normalStat.FormattedValue, "Normal should round to nearest integer");
-            Assert.AreEqual(26, normalStat.IntValue, "IntValue should return rounded int");
             
             var normalStat2 = new Stat(normalType, 25.4f);
             Assert.AreEqual("25", normalStat2.FormattedValue, "25.4 should round to 25");
@@ -196,7 +195,7 @@ namespace StatForge.Tests
             Assert.AreEqual(25.7f, stat.Value, "Internal value should be exact");
             Assert.AreEqual("25.70%", stat.FormattedValue, "Display should be rounded for percentage");
             
-            stat.AddBonus(75.3f); 
+            stat.AddModifier(75.3f); 
             Assert.AreEqual(100f, stat.Value, "Should clamp to max for percentage");
             Assert.AreEqual("100.00%", stat.FormattedValue, "Clamped value should display correctly");
             
@@ -213,7 +212,7 @@ namespace StatForge.Tests
             Assert.AreEqual(50f, stat.Value, "Percentage stat should work normally");
             Assert.AreEqual("50.00%", stat.FormattedValue, "Percentage should format correctly");
             
-            stat.AddBonus(60f);
+            stat.AddModifier(60f);
             Assert.AreEqual(100f, stat.Value, "Percentage stat should clamp to 100%");
             Assert.AreEqual("100.00%", stat.FormattedValue, "Clamped percentage should format correctly");
             
@@ -233,15 +232,15 @@ namespace StatForge.Tests
             
             var stat = new Stat(constitutionType, 10f);
             
-            var modifier1 = stat.AddBonus(5f, "Equipment");
+            var modifier1 = stat.AddModifier(5f, source: "Equipment");
             Assert.AreEqual(15f, stat.Value, "After additive modifier: expected 15f");
             Assert.AreEqual("15", stat.FormattedValue, "Display should be rounded");
             
-            var modifier2 = stat.AddMultiplier(1.5f, "Buff");
+            var modifier2 = stat.AddModifier(1.5f, ModifierType.Multiplicative, source: "Buff");
             Assert.AreEqual(22.5f, stat.Value, "After multiplicative modifier: expected 22.5f");
             Assert.AreEqual("23", stat.FormattedValue, "22.5 should round to 23");
             
-            var modifier3 = stat.AddPercentage(20f, "Skill");
+            var modifier3 = stat.AddModifier(20f, ModifierType.Percentage, source: "Skill");
             Assert.AreEqual(25.5f, stat.Value, "After percentage modifier: expected 25.5f");
             Assert.AreEqual("26", stat.FormattedValue, "25.5 should round to 26");
             
@@ -249,7 +248,7 @@ namespace StatForge.Tests
             Assert.AreEqual(18f, stat.Value, "After removing additive modifier: expected 18f");
             Assert.AreEqual("18", stat.FormattedValue, "Should display 18");
             
-            var modifier4 = stat.SetOverride(100f, "Debug");
+            var modifier4 = stat.AddModifier(100f, ModifierType.Override, priority: ModifierPriority.Override, source: "Debug");
             Assert.AreEqual(100f, stat.Value, "After override modifier: expected 100f");
             Assert.AreEqual("100", stat.FormattedValue, "Override should display correctly");
             
@@ -267,7 +266,7 @@ namespace StatForge.Tests
             
             var stat = new Stat(constitutionType, 10f);
             
-            var tempModifier = stat.AddTemporary(15f, 1f, "Potion");
+            var tempModifier = stat.AddModifier(15f, ModifierType.Additive, ModifierDuration.Temporary, 1f, source: "Potion");
             Assert.AreEqual(25f, stat.Value, "Temporary modifier should be active");
             Assert.IsNotNull(tempModifier, "Temporary modifier should not be null");
             Assert.AreEqual(1f, tempModifier.RemainingTime, 0.01f, "Remaining time should be 1f");
@@ -305,7 +304,7 @@ namespace StatForge.Tests
             Assert.AreEqual(132f, maxHP.Value, "Formula evaluation should give 132f (base + formula)");
             Assert.AreEqual("132", maxHP.FormattedValue, "Should display as 132");
             
-            constitution.AddBonus(3f);
+            constitution.AddModifier(3f);
             Assert.AreEqual(138f, maxHP.Value, "After constitution bonus, should be 138f");
             Assert.AreEqual("138", maxHP.FormattedValue, "Should display as 138");
             
@@ -352,7 +351,7 @@ namespace StatForge.Tests
             
             var stat = new Stat(percentageType, 10f);
             
-            stat.AddBonus(100f); 
+            stat.AddModifier(100f); 
             Assert.AreEqual(100f, stat.Value, "Percentage should be clamped to max");
             Assert.AreEqual("100.00%", stat.FormattedValue, "Should display max value");
             
@@ -434,7 +433,7 @@ namespace StatForge.Tests
             var stat3 = new Stat(constitutionType, 1000f);
             Assert.AreEqual(1000f, stat3.Value, "Large base should NOT be clamped for Normal");
             
-            stat2.AddBonus(5f);
+            stat2.AddModifier(5f);
             Assert.AreEqual(-5f, stat2.Value, "Modifier should work mathematically: -10 + 5 = -5");
             
             Debug.Log("[StatForge Tests] TestEdgeCases - PASSED");
@@ -456,7 +455,7 @@ namespace StatForge.Tests
             Assert.AreEqual(expectedInitialHP, testComponent.MaxHP.Value, $"Initial MaxHP should be {expectedInitialHP} (base + formula)");
             
             var initialHP = testComponent.MaxHP.Value;
-            testComponent.Constitution.AddBonus(5f);
+            testComponent.Constitution.AddModifier(5f);
             
             testComponent.MaxHP.ForceRecalculate();
             
@@ -513,7 +512,7 @@ namespace StatForge.Tests
             for (int i = 0; i < 1000; i++)
             {
                 var randomStat = stats[i % stats.Count];
-                randomStat.AddBonus(1f, $"Test{i}");
+                randomStat.AddModifier(1f, source: $"Test{i}");
             }
             
             var endTime = System.DateTime.Now;
@@ -551,7 +550,7 @@ namespace StatForge.Tests
                     stat.RemoveModifier(modifiers[statIndex]);
                 }
                 
-                modifiers[statIndex] = stat.AddBonus(i % 50, "Test");
+                modifiers[statIndex] = stat.AddModifier(i % 50, source: "Test");
                 
                 var value = stat.Value;
             }
@@ -573,9 +572,9 @@ namespace StatForge.Tests
             Debug.Log("[StatForge Tests] Running VALUE ACCESS Performance Test");
             
             var stat = new Stat(constitutionType, 100f);
-            stat.AddBonus(10f, "Base");
-            stat.AddMultiplier(1.2f, "Buff");
-            stat.AddPercentage(15f, "Skill");
+            stat.AddModifier(10f, source: "Base");
+            stat.AddModifier(1.2f, ModifierType.Multiplicative, source: "Buff");
+            stat.AddModifier(15f, ModifierType.Percentage, source: "Skill");
             
             var startTime = System.DateTime.Now;
             

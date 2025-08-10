@@ -33,7 +33,7 @@ namespace StatForge
                            ModifierDuration duration = ModifierDuration.Permanent, float time = 0f,
                            ModifierPriority priority = ModifierPriority.Normal, string source = "", object tag = null)
         {
-            this.id = Guid.NewGuid().ToString();
+            this.id = StatIdPool.GetId();
             this.targetStat = targetStat;
             this.value = value;
             this.type = type;

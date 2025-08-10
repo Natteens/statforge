@@ -108,7 +108,7 @@ namespace StatForge.Tests
             for (int i = 0; i < 3; i++)
             {
                 var stat = new Stat(baseStats[i % baseStats.Length], 10f);
-                stat.AddBonus(5f);
+                stat.AddModifier(5f);
                 var _ = stat.Value;
             }
             System.GC.Collect();
@@ -168,10 +168,10 @@ namespace StatForge.Tests
             
             var stat = new Stat(baseStats[0], 100f);
             
-            stat.AddBonus(40f, "Equipamento");           // Base 100 + 40 = 140
-            stat.AddPercentage(20f, "Bênção");           // 140 + (100 * 0.2) = 160  
-            stat.AddMultiplier(1.2f, "Habilidade");      // 160 * 1.2 = 192
-            stat.AddBonus(20f, "Poção");                 // 192 + 20 = 212
+            stat.AddModifier(40f, source: "Equipamento");
+            stat.AddModifier(20f, ModifierType.Percentage, source: "Bênção");
+            stat.AddModifier(1.2f, ModifierType.Multiplicative, source: "Habilidade");
+            stat.AddModifier(20f, source: "Poção");
             
             var valorEsperado = 212f;
             var valorReal = stat.Value;
@@ -191,7 +191,7 @@ namespace StatForge.Tests
             
             var esquiva = new Stat(percentageStats[1], 12f);
             
-            esquiva.AddBonus(200f);
+            esquiva.AddModifier(200f);
             Assert.AreEqual(95f, esquiva.Value, PRECISION_TOLERANCE, "Esquiva não clampou para 95%");
             
             esquiva.ClearModifiers();
@@ -199,7 +199,7 @@ namespace StatForge.Tests
             Assert.AreEqual(0f, esquiva.Value, PRECISION_TOLERANCE, "Esquiva não clampou para 0%");
             
             var critDmg = new Stat(percentageStats[3], 160f);
-            critDmg.AddMultiplier(5f);
+            critDmg.AddModifier(5f, ModifierType.Multiplicative);
             Assert.AreEqual(400f, critDmg.Value, PRECISION_TOLERANCE, "CRIT_DMG não respeitou limite");
             
             UnityEngine.Debug.Log($"✅ Clamping OK - Esquiva: {esquiva.Value}%, CritDmg: {critDmg.Value}%");
@@ -232,7 +232,7 @@ namespace StatForge.Tests
                 switch (i % 5)
                 {
                     case 0:
-                        var mod = stat.AddBonus(GerarFloat(-20f, 20f), $"Stress{i}");
+                        var mod = stat.AddModifier(GerarFloat(-20f, 20f), source: $"Stress{i}");
                         modificadores.Add(mod);
                         break;
                         
@@ -245,7 +245,7 @@ namespace StatForge.Tests
                         break;
                         
                     case 3:
-                        stat.AddMultiplier(GerarFloat(0.9f, 1.3f), $"Mult{i}");
+                        stat.AddModifier(GerarFloat(0.9f, 1.3f), ModifierType.Multiplicative, source: $"Mult{i}");
                         break;
                         
                     case 4:
@@ -323,7 +323,7 @@ namespace StatForge.Tests
                     var statType = baseStats[i % baseStats.Length];
                     var stat = new Stat(statType, GerarFloat(50f, 150f));
                     
-                    stat.AddBonus(GerarFloat(1f, 30f), "MemTest");
+                    stat.AddModifier(GerarFloat(1f, 30f), source: "MemTest");
                     var _ = stat.Value;
                     
                     statsTemporarios.Add(stat);
@@ -392,14 +392,14 @@ namespace StatForge.Tests
                 
                 if (level == 15)
                 {
-                    statsMap["FOR"].AddBonus(12f, "Espada Mágica");
-                    statsMap["CON"].AddBonus(8f, "Armadura");
+                    statsMap["FOR"].AddModifier(12f, source: "Espada Mágica");
+                    statsMap["CON"].AddModifier(8f, source: "Armadura");
                 }
                 
                 if (level == 30)
                 {
-                    statsMap["INT"].AddBonus(15f, "Cajado");
-                    statsMap["HP"].AddBonus(100f, "Amuleto");
+                    statsMap["INT"].AddModifier(15f, source: "Cajado");
+                    statsMap["HP"].AddModifier(100f, source: "Amuleto");
                 }
                 
                 Assert.Greater(statsMap["HP"].Value, 0, $"HP inválido no level {level}");
@@ -434,13 +434,13 @@ namespace StatForge.Tests
             arma.AddStat(danoArma);
             arma.Initialize();
             
-            var sinergiaArma = forcaJogador.AddBonus(danoArma.Value * 0.15f, "Sinergia Arma");
+            var sinergiaArma = forcaJogador.AddModifier(danoArma.Value * 0.15f, source: "Sinergia Arma");
             var forcaOriginal = forcaJogador.Value;
             
-            danoArma.AddBonus(30f, "Encantamento");
+            danoArma.AddModifier(30f, source: "Encantamento");
             
             forcaJogador.RemoveModifier(sinergiaArma);
-            sinergiaArma = forcaJogador.AddBonus(danoArma.Value * 0.15f, "Sinergia Atualizada");
+            sinergiaArma = forcaJogador.AddModifier(danoArma.Value * 0.15f, source: "Sinergia Atualizada");
             
             Assert.Greater(forcaJogador.Value, forcaOriginal, "Sinergia falhou");
             Assert.Greater(vidaJogador.Value, 0, "Vida corrompida");
@@ -453,36 +453,37 @@ namespace StatForge.Tests
         public void Teste_022_ModificadoresTemporais_CicloVida()
         {
             UnityEngine.Debug.Log("⏰ [TESTE-022] Modificadores temporais");
-            
+    
             var stat = new Stat(baseStats[0], 100f);
-            
-            stat.AddTemporary(30f, 3.0f, "Buff Longo");    // +30 por 3 segundos
-            stat.AddTemporary(20f, 1.5f, "Buff Médio");    // +20 por 1.5 segundos  
-            stat.AddTemporary(-10f, 2.0f, "Debuff");       // -10 por 2 segundos
-            
-            var valorInicial = stat.Value; // 100 + 30 + 20 - 10 = 140
+    
+            stat.AddModifier(30f, ModifierType.Additive, ModifierDuration.Temporary, 3.0f, source: "Buff Longo");
+            stat.AddModifier(20f, ModifierType.Additive, ModifierDuration.Temporary, 1.5f, source: "Buff Médio");
+            stat.AddModifier(-10f, ModifierType.Additive, ModifierDuration.Temporary, 2.0f, source: "Debuff");
+    
+            var valorInicial = stat.Value;
             Assert.AreEqual(140f, valorInicial, PRECISION_TOLERANCE, "Soma temporal incorreta");
-            
+    
             for (int frame = 0; frame < 35; frame++)
             {
-                stat.UpdateModifiers(0.1f);
-                
-                if (frame == 15)
+                // Força o update dos modificadores com deltaTime fixo
+                stat.ForceUpdateModifiers(0.1f);
+        
+                if (frame == 15) // 1.5 segundos
                 {
                     var valorApos15 = stat.Value;
                     Assert.Less(valorApos15, valorInicial - 5f, "Buff médio não expirou adequadamente");
                 }
-                
-                if (frame == 20)
+        
+                if (frame == 20) // 2.0 segundos  
                 {
                     var valorApos20 = stat.Value;
                     Assert.Greater(valorApos20, 125f, "Debuff não expirou adequadamente");
                 }
             }
-            
+    
             Assert.AreEqual(100f, stat.Value, PRECISION_TOLERANCE, "Modificadores não expiraram completamente");
             Assert.AreEqual(0, stat.Modifiers.Count, "Ainda há modificadores ativos");
-            
+    
             UnityEngine.Debug.Log($"✅ Temporais OK - Valor final: {stat.Value}");
         }
         
@@ -590,11 +591,9 @@ namespace StatForge.Tests
                         
                     case 5:
                         var forca = personagem.GetStat("FOR");
-                        forca?.AddTemporary(GerarFloat(2f, 6f), GerarFloat(0.8f, 1.5f), "BuffFrame");
+                        forca?.AddModifier(GerarFloat(2f, 6f), ModifierType.Additive, ModifierDuration.Temporary, GerarFloat(0.8f, 1.5f), source: "BuffFrame");
                         break;
                 }
-                
-                personagem.Update(0.016f);
             }
         }
         
@@ -605,7 +604,7 @@ namespace StatForge.Tests
                 var personagemAleatorio = jogo.Values.ElementAt(rng.Next(jogo.Count));
                 var statAleatorio = personagemAleatorio.Stats.ElementAt(rng.Next(personagemAleatorio.Count));
                 
-                statAleatorio.AddBonus(GerarFloat(-10f, 10f), $"StressFinal{i}");
+                statAleatorio.AddModifier(GerarFloat(-10f, 10f), source: $"StressFinal{i}");
                 var _ = statAleatorio.Value;
                 
                 if (i % 40 == 0 && statAleatorio.HasModifiers)

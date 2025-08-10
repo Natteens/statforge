@@ -260,14 +260,6 @@ namespace StatForge
             return stats.Where(s => s.StatType?.HasFormula == true);
         }
         
-        public void Update(float deltaTime)
-        {
-            foreach (var stat in stats)
-            {
-                stat.UpdateModifiers(deltaTime);
-            }
-        }
-        
         public override string ToString()
         {
             return $"{containerName} ({stats.Count} stats)";
