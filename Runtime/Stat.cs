@@ -24,7 +24,7 @@ namespace StatForge
         private static readonly Dictionary<string, List<Stat>> dependentsCache = new(256);
         private static readonly Dictionary<string, Stat> globalStats = new(512);
         
-        [NonSerialized] private StatContainer parentContainer;
+        [NonSerialized] private Container parentContainer;
         [NonSerialized] private bool hasOverrideModifier;
         [NonSerialized] private float lastCalculatedBaseValue;
         [NonSerialized] private float lastFormulaResult;
@@ -220,7 +220,7 @@ namespace StatForge
             return "Global";
         }
         
-        public void SetContainer(StatContainer container)
+        public void SetContainer(Container container)
         {
             if (parentContainer != container)
             {

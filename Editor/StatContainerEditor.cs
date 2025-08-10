@@ -4,12 +4,12 @@ using UnityEngine;
 
 namespace StatForge.Editor
 {
-    [CustomEditor(typeof(StatContainerAsset))]
-    public class StatContainerAssetEditor : UnityEditor.Editor
+    [CustomEditor(typeof(StatContainer))]
+    public class StatContainerEditor : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
         {
-            var container = (StatContainerAsset)target;
+            var container = (StatContainer)target;
 
             EditorGUILayout.Space(5);
 

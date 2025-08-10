@@ -29,11 +29,11 @@ namespace StatForge.Editor
         public static readonly Color SelectedColor = new(0.24f, 0.49f, 0.91f, 0.3f);
         public string[] AllCategories = Array.Empty<string>();
 
-        public List<StatContainerAsset> AllContainers = new();
+        public List<StatContainer> AllContainers = new();
         public List<StatType> AllStatTypes = new();
         public EditMode CurrentEdit = EditMode.None;
         public ViewMode CurrentView = ViewMode.Stats;
-        public StatContainerAsset EditingContainer;
+        public StatContainer EditingContainer;
 
         public StatType EditingStatType;
         public Vector2 EditScrollPos;
@@ -54,7 +54,7 @@ namespace StatForge.Editor
         public Vector2 ScrollPos;
         public string SearchFilter = "";
         public string SelectedCategory = "All";
-        public StatContainerAsset SelectedContainer;
+        public StatContainer SelectedContainer;
 
         public StatType SelectedStat;
         public readonly List<StatType> SelectedStats = new();

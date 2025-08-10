@@ -12,8 +12,8 @@ namespace StatForge.Tests
     [TestFixture]
     public class StatForgeEndToEndTests
     {
-        private StatContainer playerContainer;
-        private StatContainer enemyContainer;
+        private Container playerContainer;
+        private Container enemyContainer;
         private StatType healthType;
         private StatType manaType;
         private StatType attackType;
@@ -37,8 +37,8 @@ namespace StatForge.Tests
             Stat.ClearAllCaches();
             
             // Cria containers
-            playerContainer = new StatContainer("Player");
-            enemyContainer = new StatContainer("Enemy");
+            playerContainer = new Container("Player");
+            enemyContainer = new Container("Enemy");
             
             SetupPlayerStats();
             SetupEnemyStats();
@@ -493,7 +493,7 @@ namespace StatForge.Tests
         {
             Debug.Log("=== TESTE 10: Teste de Stress do Sistema ===");
             
-            var stressContainer = new StatContainer("StressTest");
+            var stressContainer = new Container("StressTest");
             var stressStats = new List<Stat>();
             
             // Cria múltiplas stats para teste de stress

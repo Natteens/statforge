@@ -8,7 +8,7 @@ namespace StatForge.Editor
     public class StatForgeEditorCache
     {
         private string[] cachedCategories;
-        private List<StatContainerAsset> cachedContainers;
+        private List<StatContainer> cachedContainers;
         private List<StatType> cachedStatTypes;
         private Dictionary<string, List<StatType>> filteredStatsCache;
         private bool isDirty = true;
@@ -23,7 +23,7 @@ namespace StatForge.Editor
             }
         }
 
-        public List<StatContainerAsset> Containers
+        public List<StatContainer> Containers
         {
             get
             {
@@ -92,13 +92,13 @@ namespace StatForge.Editor
 
         private void RefreshContainers()
         {
-            cachedContainers = new List<StatContainerAsset>();
+            cachedContainers = new List<StatContainer>();
             var guids = AssetDatabase.FindAssets("t:StatContainerAsset");
 
             foreach (var guid in guids)
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
-                var container = AssetDatabase.LoadAssetAtPath<StatContainerAsset>(path);
+                var container = AssetDatabase.LoadAssetAtPath<StatContainer>(path);
                 if (container != null) cachedContainers.Add(container);
             }
         }

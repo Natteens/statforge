@@ -28,7 +28,7 @@ namespace StatForge
             }
         }
         
-        public static float Evaluate(string formula, StatContainer container)
+        public static float Evaluate(string formula, Container container)
         {
             if (string.IsNullOrEmpty(formula) || container == null)
                 return 0f;
@@ -72,7 +72,7 @@ namespace StatForge
             });
         }
         
-        private static string ProcessFormula(string formula, StatContainer container)
+        private static string ProcessFormula(string formula, Container container)
         {
             return variablePattern.Replace(formula, match =>
             {

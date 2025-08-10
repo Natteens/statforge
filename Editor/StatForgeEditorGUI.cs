@@ -409,7 +409,7 @@ namespace StatForge.Editor
             EditorGUILayout.EndHorizontal();
         }
 
-        private void DrawContainerPreview(StatContainerAsset container)
+        private void DrawContainerPreview(StatContainer container)
         {
             var headerStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 14 };
             GUILayout.Label("Container Preview", headerStyle);
@@ -1265,7 +1265,7 @@ namespace StatForge.Editor
             }
         }
 
-        private void DrawContainerCard(StatContainerAsset container)
+        private void DrawContainerCard(StatContainer container)
         {
             var cardStyle = new GUIStyle("box")
             {

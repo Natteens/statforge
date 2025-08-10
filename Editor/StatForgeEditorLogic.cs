@@ -191,7 +191,7 @@ namespace StatForge.Editor
             data.SelectedContainer = null;
         }
 
-        public void StartEditContainer(StatContainerAsset container)
+        public void StartEditContainer(StatContainer container)
         {
             data.CurrentEdit = EditMode.EditContainer;
             data.IsCreatingNew = false;
@@ -200,7 +200,7 @@ namespace StatForge.Editor
             LoadContainerToEditor(container);
         }
 
-        private void LoadContainerToEditor(StatContainerAsset container)
+        private void LoadContainerToEditor(StatContainer container)
         {
             data.NewContainerName = container.ContainerName;
             data.NewContainerDescription = container.Description;
@@ -222,7 +222,7 @@ namespace StatForge.Editor
                 return;
             }
 
-            StatContainerAsset container;
+            StatContainer container;
             string path;
 
             if (data.IsCreatingNew)
@@ -232,7 +232,7 @@ namespace StatForge.Editor
 
                 if (File.Exists(path)) path = AssetDatabase.GenerateUniqueAssetPath(path);
 
-                container = ScriptableObject.CreateInstance<StatContainerAsset>();
+                container = ScriptableObject.CreateInstance<StatContainer>();
                 AssetDatabase.CreateAsset(container, path);
             }
             else
@@ -252,7 +252,7 @@ namespace StatForge.Editor
             RefreshAll();
         }
 
-        public void DeleteContainer(StatContainerAsset container)
+        public void DeleteContainer(StatContainer container)
         {
             var path = AssetDatabase.GetAssetPath(container);
             AssetDatabase.DeleteAsset(path);
