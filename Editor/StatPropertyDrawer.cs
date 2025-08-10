@@ -18,20 +18,17 @@ namespace StatForge.Editor
         {
             if (property == null) return;
             
+            if (Event.current.type == EventType.Used) return;
+            
             EditorGUI.BeginProperty(position, label, property);
             
             try
             {
                 DrawStatProperty(position, property, label);
-                
-                if (Application.isPlaying)
-                {
-                    EditorUtility.SetDirty(property.serializedObject.targetObject);
-                    if (Event.current.type == EventType.Layout)
-                    {
-                        EditorApplication.QueuePlayerLoopUpdate();
-                    }
-                }
+            }
+            catch (ExitGUIException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -73,33 +70,48 @@ namespace StatForge.Editor
             var statTypeRect = new Rect(position.x, y, position.width * LABEL_WIDTH_RATIO, LINE_HEIGHT);
             var valueRect = new Rect(position.x + position.width * (LABEL_WIDTH_RATIO + 0.02f), y, position.width * VALUE_WIDTH_RATIO, LINE_HEIGHT);
             
-            EditorGUI.BeginChangeCheck();
-            EditorGUI.PropertyField(statTypeRect, statTypeProperty, GUIContent.none);
-            
-            if (EditorGUI.EndChangeCheck())
+            try
             {
-                HandleStatTypeChange(statTypeProperty, baseValueProperty);
-            }
-            
-            if (statTypeProperty.objectReferenceValue != null)
-            {
-                var statType = statTypeProperty.objectReferenceValue as StatType;
-                if (statType != null)
+                EditorGUI.BeginChangeCheck();
+                
+                using (new EditorGUI.DisabledScope(EditorApplication.isPlaying))
                 {
-                    if (ShouldSetDefaultValue(baseValueProperty, statType))
+                    EditorGUI.PropertyField(statTypeRect, statTypeProperty, GUIContent.none);
+                }
+                
+                if (EditorGUI.EndChangeCheck() && !EditorApplication.isPlaying)
+                {
+                    HandleStatTypeChange(statTypeProperty, baseValueProperty);
+                }
+                
+                if (statTypeProperty.objectReferenceValue != null)
+                {
+                    var statType = statTypeProperty.objectReferenceValue as StatType;
+                    if (statType != null)
                     {
-                        SetDefaultValue(baseValueProperty, statType);
+                        if (ShouldSetDefaultValue(baseValueProperty, statType))
+                        {
+                            SetDefaultValue(baseValueProperty, statType);
+                        }
+                        
+                        EditorGUI.PropertyField(valueRect, baseValueProperty, GUIContent.none);
                     }
-                    
-                    EditorGUI.PropertyField(valueRect, baseValueProperty, GUIContent.none);
+                }
+                else
+                {
+                    using (new EditorGUI.DisabledScope(true))
+                    {
+                        EditorGUI.FloatField(valueRect, 0f);
+                    }
                 }
             }
-            else
+            catch (ExitGUIException)
             {
-                using (new EditorGUI.DisabledScope(true))
-                {
-                    EditorGUI.FloatField(valueRect, 0f);
-                }
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[StatForge] Error in DrawStatTypeAndValueLine: {ex}");
             }
         }
         
@@ -161,7 +173,7 @@ namespace StatForge.Editor
                 }
                 else
                 {
-                    DrawErrorInfo(rect, "Runtime stat não encontrado");
+                    DrawErrorInfo(rect, "Debug: " + GetPropertyPath(property));
                 }
             }
             catch (Exception ex)
@@ -204,6 +216,45 @@ namespace StatForge.Editor
             EditorGUI.LabelField(rect, $"⚠ {message}", style);
         }
         
+        private string GetPropertyPath(SerializedProperty property)
+        {
+            return $"Path: {property.propertyPath} | Target: {property.serializedObject.targetObject?.GetType().Name}";
+        }
+        
+        private Stat GetStatFromProperty(SerializedProperty property)
+        {
+            try
+            {
+                var targetObject = property.serializedObject.targetObject;
+                if (targetObject == null) return null;
+                
+                // Parse do property path para navegar pela hierarquia
+                var pathParts = property.propertyPath.Split('.');
+                object currentObject = targetObject;
+                
+                foreach (var part in pathParts)
+                {
+                    if (currentObject == null) break;
+                    
+                    var field = currentObject.GetType().GetField(part,
+                        BindingFlags.NonPublic |
+                        BindingFlags.Public |
+                        BindingFlags.Instance);
+                    
+                    if (field == null) break;
+                    
+                    currentObject = field.GetValue(currentObject);
+                }
+                
+                return currentObject as Stat;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[StatForge] Error getting stat from property: {ex}");
+                return null;
+            }
+        }
+        
         private void HandleStatTypeChange(SerializedProperty statTypeProperty, SerializedProperty baseValueProperty)
         {
             try
@@ -221,7 +272,13 @@ namespace StatForge.Editor
                     baseValueProperty.floatValue = 0f;
                 }
                 
-                baseValueProperty.serializedObject.ApplyModifiedProperties();
+                EditorApplication.delayCall += () =>
+                {
+                    if (baseValueProperty.serializedObject != null)
+                    {
+                        baseValueProperty.serializedObject.ApplyModifiedProperties();
+                    }
+                };
             }
             catch (Exception ex)
             {
@@ -240,33 +297,18 @@ namespace StatForge.Editor
             try
             {
                 baseValueProperty.floatValue = statType.DefaultValue;
-                baseValueProperty.serializedObject.ApplyModifiedProperties();
+                
+                EditorApplication.delayCall += () =>
+                {
+                    if (baseValueProperty.serializedObject != null)
+                    {
+                        baseValueProperty.serializedObject.ApplyModifiedProperties();
+                    }
+                };
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[StatForge] Error setting default value: {ex}");
-            }
-        }
-        
-        private Stat GetStatFromProperty(SerializedProperty property)
-        {
-            try
-            {
-                var targetObject = property.serializedObject.targetObject;
-                if (targetObject == null) return null;
-                
-                var fieldPath = property.propertyPath;
-                var field = targetObject.GetType().GetField(fieldPath,
-                    BindingFlags.NonPublic |
-                    BindingFlags.Public |
-                    BindingFlags.Instance);
-                
-                return field?.GetValue(targetObject) as Stat;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[StatForge] Error getting stat from property: {ex}");
-                return null;
             }
         }
         
