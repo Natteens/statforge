@@ -178,7 +178,6 @@ namespace StatForge
                     
                     if (modifier.Update(deltaTime) || modifier.ShouldRemove())
                     {
-                        Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {Name}");
                         modifiers.RemoveAt(i);
                         OnModifierRemoved?.Invoke(this, modifier);
                         removedAny = true;
@@ -188,7 +187,6 @@ namespace StatForge
                 {
                     if (modifier.ShouldRemove())
                     {
-                        Debug.Log($"[StatForge] Modificador condicional {modifier.Id} removido de {Name}");
                         modifiers.RemoveAt(i);
                         OnModifierRemoved?.Invoke(this, modifier);
                         removedAny = true;
@@ -488,8 +486,7 @@ namespace StatForge
             modifierCacheValid = false;
             OnModifierAdded?.Invoke(this, modifier);
             
-            Debug.Log($"[StatForge] Modificador adicionado: {value}{GetModifierSymbol(type)} para {Name} " +
-                     $"({duration}, {(duration == ModifierDuration.Temporary ? $"{time}s" : "permanente")})");
+           // Debug.Log($"[StatForge] Modificador adicionado: {value}{GetModifierSymbol(type)} para {Name} " + $"({duration}, {(duration == ModifierDuration.Temporary ? $"{time}s" : "permanente")})");
             
             if (duration == ModifierDuration.Temporary)
             {
@@ -506,7 +503,7 @@ namespace StatForge
             {
                 OnModifierRemoved?.Invoke(this, modifier);
                 modifierCacheValid = false;
-                Debug.Log($"[StatForge] Modificador removido: {modifier.Id} de {Name}");
+              //  Debug.Log($"[StatForge] Modificador removido: {modifier.Id} de {Name}");
                 UpdateTemporaryTrackingAfterRemoval();
                 InvalidateCache();
                 return true;
@@ -524,7 +521,7 @@ namespace StatForge
                     modifiers.RemoveAt(i);
                     OnModifierRemoved?.Invoke(this, modifier);
                     modifierCacheValid = false;
-                    Debug.Log($"[StatForge] Modificador removido por ID: {id} de {Name}");
+                 //   Debug.Log($"[StatForge] Modificador removido por ID: {id} de {Name}");
                     UpdateTemporaryTrackingAfterRemoval();
                     InvalidateCache();
                     return true;
