@@ -1,3 +1,10 @@
+## [0.3.4](https://github.com/Natteens/statforge/compare/v0.3.3...v0.3.4) (2025-08-10)
+
+
+### Bug Fixes
+
+* Refactor stat range adjustment and modifier updates ([d5d9edf](https://github.com/Natteens/statforge/commit/d5d9edf694f4d591cba0d6cef3fdc741bb589cc1))
+
 ## [0.3.3](https://github.com/Natteens/statforge/compare/v0.3.2...v0.3.3) (2025-08-10)
 
 
