@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
@@ -65,7 +66,7 @@ namespace StatForge
                 {
                     var oldBase = baseValue;
                     baseValue = value;
-                    hasBeenInitialized = true; // Marca como explicitamente definido
+                    hasBeenInitialized = true;
                     OnBaseValueChanged?.Invoke(this, oldBase, value);
                     InvalidateCache();
                 }
@@ -79,7 +80,8 @@ namespace StatForge
             {
                 RegisterIfNeeded();
                 EnsureDefaultValueIfNeeded();
-                UpdateExpiredModifiers();
+                
+                UpdateModifiersInternal();
                 
                 if (needsRecalculation || isDirty || Math.Abs(lastCalculatedBaseValue - baseValue) > float.Epsilon)
                     RecalculateValue();
@@ -124,7 +126,7 @@ namespace StatForge
             baseValue = value;
             statId = customId ?? StatIdPool.GetId();
             lastCalculatedBaseValue = value;
-            hasBeenInitialized = true; // Explicitamente inicializado
+            hasBeenInitialized = true;
             InitializeDefaults();
         }
         
@@ -134,7 +136,7 @@ namespace StatForge
             baseValue = value;
             statId = StatIdPool.GetId();
             lastCalculatedBaseValue = value;
-            hasBeenInitialized = true; // Explicitamente inicializado
+            hasBeenInitialized = true;
             InitializeDefaults();
         }
         
@@ -153,6 +155,51 @@ namespace StatForge
             isNotifying = false;
             
             RegisterIfNeeded();
+            StatModifierManager.RegisterStat(this);
+        }
+        
+        private void UpdateModifiersInternal()
+        {
+            if (modifiers.Count == 0) return;
+            
+            var deltaTime = 0.016f;
+            
+            bool removedAny = false;
+            bool hasAnyTemporary = false;
+            
+            for (int i = modifiers.Count - 1; i >= 0; i--)
+            {
+                var modifier = modifiers[i];
+                if (modifier == null) continue;
+                
+                if (modifier.Duration == ModifierDuration.Temporary)
+                {
+                    hasAnyTemporary = true;
+                    
+                    if (modifier.Update(deltaTime) || modifier.ShouldRemove())
+                    {
+                        Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {Name}");
+                        modifiers.RemoveAt(i);
+                        OnModifierRemoved?.Invoke(this, modifier);
+                        removedAny = true;
+                    }
+                }
+                else if (modifier.Duration == ModifierDuration.Conditional)
+                {
+                    if (modifier.ShouldRemove())
+                    {
+                        Debug.Log($"[StatForge] Modificador condicional {modifier.Id} removido de {Name}");
+                        modifiers.RemoveAt(i);
+                        OnModifierRemoved?.Invoke(this, modifier);
+                        removedAny = true;
+                    }
+                }
+            }
+            
+            StatModifierManager.UpdateTemporaryTracking(this, hasAnyTemporary);
+            
+            if (removedAny)
+                InvalidateCache();
         }
         
         private void RegisterIfNeeded()
@@ -264,28 +311,6 @@ namespace StatForge
             }
         }
         
-        private void UpdateExpiredModifiers()
-        {
-            bool removedAny = false;
-            
-            for (int i = modifiers.Count - 1; i >= 0; i--)
-            {
-                var modifier = modifiers[i];
-                if (modifier != null)
-                {
-                    if (modifier.Update(Time.deltaTime) || modifier.ShouldRemove())
-                    {
-                        modifiers.RemoveAt(i);
-                        OnModifierRemoved?.Invoke(this, modifier);
-                        removedAny = true;
-                    }
-                }
-            }
-            
-            if (removedAny)
-                InvalidateModifierCache();
-        }
-        
         private void RecalculateValue()
         {
             var oldValue = cachedValue;
@@ -306,8 +331,6 @@ namespace StatForge
         
         private void EnsureDefaultValueIfNeeded()
         {
-            // SÓ aplica valor padrão se nunca foi explicitamente inicializado
-            // E se o StatType tem um valor padrão diferente de zero
             if (!hasBeenInitialized && 
                 Math.Abs(baseValue) < float.Epsilon && 
                 statType != null && 
@@ -462,9 +485,18 @@ namespace StatForge
             var modifier = new StatModifier(this, value, type, duration, time, priority, source, tag);
             
             modifiers.Add(modifier);
-            InvalidateModifierCache();
+            modifierCacheValid = false;
             OnModifierAdded?.Invoke(this, modifier);
             
+            Debug.Log($"[StatForge] Modificador adicionado: {value}{GetModifierSymbol(type)} para {Name} " +
+                     $"({duration}, {(duration == ModifierDuration.Temporary ? $"{time}s" : "permanente")})");
+            
+            if (duration == ModifierDuration.Temporary)
+            {
+                StatModifierManager.UpdateTemporaryTracking(this, true);
+            }
+            
+            InvalidateCache();
             return modifier;
         }
         
@@ -473,7 +505,10 @@ namespace StatForge
             if (modifiers.Remove(modifier))
             {
                 OnModifierRemoved?.Invoke(this, modifier);
-                InvalidateModifierCache();
+                modifierCacheValid = false;
+                Debug.Log($"[StatForge] Modificador removido: {modifier.Id} de {Name}");
+                UpdateTemporaryTrackingAfterRemoval();
+                InvalidateCache();
                 return true;
             }
             return false;
@@ -488,7 +523,10 @@ namespace StatForge
                     var modifier = modifiers[i];
                     modifiers.RemoveAt(i);
                     OnModifierRemoved?.Invoke(this, modifier);
-                    InvalidateModifierCache();
+                    modifierCacheValid = false;
+                    Debug.Log($"[StatForge] Modificador removido por ID: {id} de {Name}");
+                    UpdateTemporaryTrackingAfterRemoval();
+                    InvalidateCache();
                     return true;
                 }
             }
@@ -506,7 +544,9 @@ namespace StatForge
                     OnModifierRemoved?.Invoke(this, modifier);
                 }
             }
-            InvalidateModifierCache();
+            modifierCacheValid = false;
+            UpdateTemporaryTrackingAfterRemoval();
+            InvalidateCache();
         }
         
         public void RemoveModifiersByTag(object tag)
@@ -520,7 +560,9 @@ namespace StatForge
                     OnModifierRemoved?.Invoke(this, modifier);
                 }
             }
-            InvalidateModifierCache();
+            modifierCacheValid = false;
+            UpdateTemporaryTrackingAfterRemoval();
+            InvalidateCache();
         }
         
         public void ClearModifiers()
@@ -533,14 +575,28 @@ namespace StatForge
                 OnModifierRemoved?.Invoke(this, modifier);
             }
             
-            InvalidateModifierCache();
+            modifierCacheValid = false;
+            UpdateTemporaryTrackingAfterRemoval();
+            InvalidateCache();
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void InvalidateModifierCache()
+        private void UpdateTemporaryTrackingAfterRemoval()
         {
-            modifierCacheValid = false;
-            InvalidateCache();
+            var hasAnyTemporary = modifiers.Any(m => m.Duration == ModifierDuration.Temporary);
+            StatModifierManager.UpdateTemporaryTracking(this, hasAnyTemporary);
+        }
+        
+        private string GetModifierSymbol(ModifierType type)
+        {
+            return type switch
+            {
+                ModifierType.Additive => "+",
+                ModifierType.Subtractive => "-",
+                ModifierType.Multiplicative => "x",
+                ModifierType.Override => "=",
+                ModifierType.Percentage => "%",
+                _ => ""
+            };
         }
         
         public void ForceRecalculate()
@@ -550,7 +606,6 @@ namespace StatForge
             var _ = Value;
         }
         
-        // Método para forçar update de modificadores (útil para testes)
         public void ForceUpdateModifiers(float deltaTime)
         {
             bool removedAny = false;
@@ -567,7 +622,11 @@ namespace StatForge
             }
             
             if (removedAny)
-                InvalidateModifierCache();
+            {
+                modifierCacheValid = false;
+                UpdateTemporaryTrackingAfterRemoval();
+                InvalidateCache();
+            }
         }
         
         public static void RegisterDependency(string sourceStatId, Stat dependentStat)
@@ -606,6 +665,11 @@ namespace StatForge
         public bool HasModifiers => modifiers.Count > 0;
         public bool HasFormula => statType?.HasFormula == true;
         public bool IsDirty => isDirty || needsRecalculation;
+        
+        public static string GetGlobalDebugInfo()
+        {
+            return StatModifierManager.GetGlobalDebugInfo();
+        }
         
         public static implicit operator float(Stat stat) => stat?.Value ?? 0f;
         public static implicit operator Stat(float value) => new(value);
@@ -652,6 +716,7 @@ namespace StatForge
             dependentsCache.Clear();
             globalStats.Clear();
             currentlyNotifying.Clear();
+            StatModifierManager.ClearAllCaches();
             StatRegistry.ClearFieldCache();
         }
         
@@ -661,7 +726,10 @@ namespace StatForge
         public bool GetNeedsRecalculation() => needsRecalculation;
         public string GetDebugInfo()
         {
-            return $"Stat[{Name}] Base:{baseValue:F2} Cached:{cachedValue:F2} Mods:{modifiers.Count} Dirty:{isDirty}";
+            var tempMods = modifiers.Count(m => m.Duration == ModifierDuration.Temporary);
+            var hasTemporary = StatModifierManager.IsTrackedForTemporary(this);
+            return $"Stat[{Name}] Base:{baseValue:F2} Cached:{cachedValue:F2} " +
+                   $"Mods:{modifiers.Count} Temp:{tempMods} Dirty:{isDirty} InGlobalList:{hasTemporary}";
         }
     }
 }

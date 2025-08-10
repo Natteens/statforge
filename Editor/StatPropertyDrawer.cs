@@ -23,10 +23,18 @@ namespace StatForge.Editor
             try
             {
                 DrawStatProperty(position, property, label);
+                
+                if (Application.isPlaying)
+                {
+                    EditorUtility.SetDirty(property.serializedObject.targetObject);
+                    if (Event.current.type == EventType.Layout)
+                    {
+                        EditorApplication.QueuePlayerLoopUpdate();
+                    }
+                }
             }
             catch (Exception ex)
             {
-                // Fallback seguro em caso de erro
                 var errorRect = new Rect(position.x, position.y, position.width, LINE_HEIGHT);
                 EditorGUI.LabelField(errorRect, $"[StatForge Error]: {ex.Message}", EditorStyles.helpBox);
                 Debug.LogError($"[StatForge] StatPropertyDrawer Error: {ex}");
@@ -51,15 +59,12 @@ namespace StatForge.Editor
             var currentY = position.y;
             var rect = new Rect(position.x, currentY, position.width, LINE_HEIGHT);
             
-            // Header principal
             EditorGUI.LabelField(rect, label.text, EditorStyles.boldLabel);
             currentY += LINE_HEIGHT + SPACING;
             
-            // Linha StatType e BaseValue
             DrawStatTypeAndValueLine(position, statTypeProperty, baseValueProperty, currentY);
             currentY += LINE_HEIGHT + SPACING;
             
-            // Linha de informações (runtime ou preview)
             DrawInfoLine(position, property, statTypeProperty, baseValueProperty, currentY);
         }
         
@@ -68,7 +73,6 @@ namespace StatForge.Editor
             var statTypeRect = new Rect(position.x, y, position.width * LABEL_WIDTH_RATIO, LINE_HEIGHT);
             var valueRect = new Rect(position.x + position.width * (LABEL_WIDTH_RATIO + 0.02f), y, position.width * VALUE_WIDTH_RATIO, LINE_HEIGHT);
             
-            // StatType field
             EditorGUI.BeginChangeCheck();
             EditorGUI.PropertyField(statTypeRect, statTypeProperty, GUIContent.none);
             
@@ -77,13 +81,11 @@ namespace StatForge.Editor
                 HandleStatTypeChange(statTypeProperty, baseValueProperty);
             }
             
-            // Value field (só se tiver StatType)
             if (statTypeProperty.objectReferenceValue != null)
             {
                 var statType = statTypeProperty.objectReferenceValue as StatType;
                 if (statType != null)
                 {
-                    // Auto-set default value se necessário
                     if (ShouldSetDefaultValue(baseValueProperty, statType))
                     {
                         SetDefaultValue(baseValueProperty, statType);
@@ -94,7 +96,6 @@ namespace StatForge.Editor
             }
             else
             {
-                // Se não tem StatType, mostra field desabilitado
                 using (new EditorGUI.DisabledScope(true))
                 {
                     EditorGUI.FloatField(valueRect, 0f);
@@ -230,7 +231,6 @@ namespace StatForge.Editor
         
         private bool ShouldSetDefaultValue(SerializedProperty baseValueProperty, StatType statType)
         {
-            // Só define valor padrão se o valor atual for zero E o StatType tem valor padrão diferente de zero
             return Mathf.Approximately(baseValueProperty.floatValue, 0f) && 
                    !Mathf.Approximately(statType.DefaultValue, 0f);
         }

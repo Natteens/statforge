@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace StatForge
@@ -91,6 +92,81 @@ namespace StatForge
             var suffix = type == ModifierType.Multiplicative ? "x" : 
                         type == ModifierType.Percentage ? "%" : "";
             return $"{sign}{value}{suffix} ({source})";
+        }
+    }
+    
+    public static class StatModifierManager
+    {
+        private static readonly List<Stat> allStatsWithTemporaryModifiers = new();
+        private static bool globalUpdateInitialized;
+        
+        static StatModifierManager()
+        {
+            InitializeGlobalUpdate();
+        }
+        
+        private static void InitializeGlobalUpdate()
+        {
+            if (globalUpdateInitialized) return;
+            
+            globalUpdateInitialized = true;
+            
+            #if UNITY_EDITOR
+            UnityEditor.EditorApplication.update += GlobalUpdateAllStats;
+            #endif
+        }
+        
+        private static void GlobalUpdateAllStats()
+        {
+            if (allStatsWithTemporaryModifiers.Count == 0) return;
+            
+            for (int i = allStatsWithTemporaryModifiers.Count - 1; i >= 0; i--)
+            {
+                if (i < allStatsWithTemporaryModifiers.Count)
+                {
+                    var stat = allStatsWithTemporaryModifiers[i];
+                    if (stat != null)
+                    {
+                        var _ = stat.Value;
+                    }
+                    else
+                    {
+                        allStatsWithTemporaryModifiers.RemoveAt(i);
+                    }
+                }
+            }
+        }
+        
+        public static void RegisterStat(Stat stat)
+        {
+        }
+        
+        public static void UpdateTemporaryTracking(Stat stat, bool hasTemporary)
+        {
+            if (hasTemporary)
+            {
+                if (!allStatsWithTemporaryModifiers.Contains(stat))
+                    allStatsWithTemporaryModifiers.Add(stat);
+            }
+            else
+            {
+                allStatsWithTemporaryModifiers.Remove(stat);
+            }
+        }
+        
+        public static bool IsTrackedForTemporary(Stat stat)
+        {
+            return allStatsWithTemporaryModifiers.Contains(stat);
+        }
+        
+        public static string GetGlobalDebugInfo()
+        {
+            return $"[StatForge Global] Stats com modificadores temporários: {allStatsWithTemporaryModifiers.Count}";
+        }
+        
+        public static void ClearAllCaches()
+        {
+            allStatsWithTemporaryModifiers.Clear();
         }
     }
 }
