@@ -1,3 +1,10 @@
+## [0.3.2](https://github.com/Natteens/statforge/compare/v0.3.1...v0.3.2) (2025-08-10)
+
+
+### Bug Fixes
+
+* Refactor Stat modifier system and remove pooling ([42bd89f](https://github.com/Natteens/statforge/commit/42bd89f6e5fd89124e768d2650ebc32f3f79ab82))
+
 ## [0.3.1](https://github.com/Natteens/statforge/compare/v0.3.0...v0.3.1) (2025-08-09)
 
 
