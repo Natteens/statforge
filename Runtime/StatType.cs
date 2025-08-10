@@ -57,7 +57,6 @@ namespace StatForge
         }
         
         public bool HasFormula => !string.IsNullOrEmpty(formula);
-        public bool HasLimits => valueType == StatValueType.Percentage;
         
         public string FormatValue(float value)
         {
@@ -68,25 +67,6 @@ namespace StatForge
                 StatValueType.Rate => $"{value.ToString("F1", CultureInfo.InvariantCulture)}/s",
                 _ => value.ToString("F1", CultureInfo.InvariantCulture)
             };
-        }
-        
-        public string GetValueSuffix()
-        {
-            return valueType switch
-            {
-                StatValueType.Percentage => "%",
-                StatValueType.Rate => "/s",
-                _ => ""
-            };
-        }
-        
-        public void AutoAdjustRangeForType()
-        {
-            if (valueType == StatValueType.Percentage)
-            {
-                if (minValue < 0f) minValue = 0f;
-                if (maxValue > 100f) maxValue = 100f;
-            }
         }
         
         private string GenerateShortName()
@@ -117,8 +97,6 @@ namespace StatForge
                 else if (defaultValue > maxValue)
                     defaultValue = maxValue;
             }
-            
-            AutoAdjustRangeForType();
         }
     }
 }

@@ -102,13 +102,31 @@ namespace StatForge.Editor
             
             if (oldValueType != statType.ValueType)
             {
-                statType.AutoAdjustRangeForType();
+                // CORREÇÃO: Chama método de ajuste manual em vez do removido
+                AdjustRangeForValueType(statType);
                 EditorUtility.SetDirty(statType);
             }
             
             DrawValueTypePreview(statType);
             
             EditorGUILayout.Space(SECTION_SPACING);
+        }
+        
+        // CORREÇÃO: Método próprio do Editor para ajustar ranges
+        private void AdjustRangeForValueType(StatType statType)
+        {
+            if (statType.ValueType == StatValueType.Percentage)
+            {
+                // Ajusta para porcentagem se necessário
+                if (statType.MinValue < 0f) statType.MinValue = 0f;
+                if (statType.MaxValue > 100f) statType.MaxValue = 100f;
+                
+                // Ajusta default se estiver fora do range
+                if (statType.DefaultValue < statType.MinValue)
+                    statType.DefaultValue = statType.MinValue;
+                else if (statType.DefaultValue > statType.MaxValue)
+                    statType.DefaultValue = statType.MaxValue;
+            }
         }
         
         private void DrawValueTypePreview(StatType statType)

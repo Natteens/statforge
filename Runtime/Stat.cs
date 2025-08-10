@@ -15,8 +15,8 @@ namespace StatForge
         [SerializeField] private bool debug;
         
         private float cachedValue;
-        private bool needsRecalculation = true;
-        private bool isDirty = true;
+        private bool needsRecalculation;
+        private bool isDirty;
         
         private List<IStatModifier> modifiers = new();
         
@@ -40,7 +40,6 @@ namespace StatForge
         [NonSerialized] private float percentageCache;
         [NonSerialized] private IStatModifier overrideCache;
         [NonSerialized] private bool modifierCacheValid;
-        [NonSerialized] private double lastUpdateTime;
         
         public StatType StatType => statType;
         public string Name => statType ? statType.DisplayName : "None";
@@ -80,11 +79,7 @@ namespace StatForge
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                RegisterIfNeeded();
-                EnsureDefaultValueIfNeeded();
-                
-                if (Application.isPlaying)
-                    UpdateModifiersInternal();
+                EnsureInitialized();
                 
                 if (needsRecalculation || isDirty || Math.Abs(lastCalculatedBaseValue - baseValue) > float.Epsilon)
                     RecalculateValue();
@@ -116,36 +111,33 @@ namespace StatForge
             InitializeDefaults();
             if (statType != null)
             {
-                baseValue = statType.DefaultValue;
-                lastCalculatedBaseValue = baseValue;
-                cachedValue = baseValue;
-                hasBeenInitialized = true;
+                SetBaseValueAndInitialize(statType.DefaultValue);
             }
         }
         
         public Stat(StatType type, float value = 0f, string customId = null)
         {
             statType = type;
-            baseValue = value;
             statId = customId ?? StatIdPool.GetId();
-            lastCalculatedBaseValue = value;
-            hasBeenInitialized = true;
             InitializeDefaults();
+            
+            var finalValue = (Math.Abs(value) < float.Epsilon && type != null && Math.Abs(type.DefaultValue) > float.Epsilon) 
+                ? type.DefaultValue 
+                : value;
+                
+            SetBaseValueAndInitialize(finalValue);
         }
         
         private Stat(float value)
         {
             statType = null;
-            baseValue = value;
             statId = StatIdPool.GetId();
-            lastCalculatedBaseValue = value;
-            hasBeenInitialized = true;
             InitializeDefaults();
+            SetBaseValueAndInitialize(value);
         }
         
         private void InitializeDefaults()
         {
-            cachedValue = baseValue;
             additiveCache = 0f;
             multiplicativeCache = 1f;
             percentageCache = 0f;
@@ -156,56 +148,30 @@ namespace StatForge
             lastFormulaResult = 0f;
             ownerPrefix = "Global";
             isNotifying = false;
-            lastUpdateTime = 0;
+            needsRecalculation = false;
+            isDirty = false;
+            hasBeenInitialized = false;
+        }
+        
+        private void SetBaseValueAndInitialize(float value)
+        {
+            baseValue = value;
+            cachedValue = value;
+            lastCalculatedBaseValue = value;
+            hasBeenInitialized = true;
             
             RegisterIfNeeded();
         }
         
-        private void UpdateModifiersInternal()
+        private void EnsureInitialized()
         {
-            if (modifiers.Count == 0) return;
-
-            var currentTime = Time.realtimeSinceStartupAsDouble;
-            var deltaTime = (float)(currentTime - lastUpdateTime);
-            lastUpdateTime = currentTime;
-
-            if (deltaTime <= 0) deltaTime = Time.deltaTime;
-
-            bool removedAny = false;
-
-            for (int i = modifiers.Count - 1; i >= 0; i--)
+            if (!hasBeenInitialized)
             {
-                var modifier = modifiers[i];
-                if (modifier == null) continue;
-
-                if (modifier.Duration == ModifierDuration.Temporary)
-                {
-                    if (modifier.Update(deltaTime) || modifier.ShouldRemove())
-                    {
-                        if (debug)
-                            Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {Name}");
-                        modifiers.RemoveAt(i);
-                        OnModifierRemoved?.Invoke(this, modifier);
-                        removedAny = true;
-                    }
-                }
-                else if (modifier.Duration == ModifierDuration.Conditional)
-                {
-                    if (modifier.ShouldRemove())
-                    {
-                        if (debug)
-                            Debug.Log($"[StatForge] Modificador condicional {modifier.Id} removido de {Name}");
-                        modifiers.RemoveAt(i);
-                        OnModifierRemoved?.Invoke(this, modifier);
-                        removedAny = true;
-                    }
-                }
+                var defaultVal = statType?.DefaultValue ?? 0f;
+                SetBaseValueAndInitialize(Math.Abs(baseValue) > float.Epsilon ? baseValue : defaultVal);
             }
-
-            if (removedAny)
-            {
-                InvalidateCache();
-            }
+            
+            RegisterIfNeeded();
         }
         
         private void RegisterIfNeeded()
@@ -220,15 +186,14 @@ namespace StatForge
             if (!string.IsNullOrEmpty(statType.DisplayName))
             {
                 globalStats[$"{ownerPrefix}_{statType.DisplayName}"] = this;
+                globalStats[statType.DisplayName] = this;
             }
             
             if (!string.IsNullOrEmpty(statType.ShortName))
             {
                 globalStats[$"{ownerPrefix}_{statType.ShortName}"] = this;
+                globalStats[statType.ShortName] = this;
             }
-            
-            globalStats[statType.DisplayName] = this;
-            globalStats[statType.ShortName] = this;
         }
         
         private string DetectOwnerPrefix()
@@ -249,7 +214,7 @@ namespace StatForge
             }
             catch
             {
-                //ignore
+                // ignore
             }
 
             return "Global";
@@ -335,20 +300,6 @@ namespace StatForge
                 OnValueChanged?.Invoke(this, oldValue, newValue);
             }
         }
-        
-        private void EnsureDefaultValueIfNeeded()
-        {
-            if (!hasBeenInitialized && 
-                Math.Abs(baseValue) < float.Epsilon && 
-                statType != null && 
-                Math.Abs(statType.DefaultValue) > float.Epsilon)
-            {
-                baseValue = statType.DefaultValue;
-                lastCalculatedBaseValue = baseValue;
-                cachedValue = baseValue;
-                hasBeenInitialized = true;
-            }
-        }
 
         private float CalculateFinalValue()
         {
@@ -386,9 +337,7 @@ namespace StatForge
             var result = inputValue;
             
             result += additiveCache;
-            
             result += baseValue * (percentageCache * 0.01f);
-            
             result *= multiplicativeCache;
             
             return result;
@@ -396,10 +345,7 @@ namespace StatForge
         
         private float ApplyClampingIfNeeded(float value)
         {
-            if (hasOverrideModifier)
-                return value;
-                
-            if (statType == null)
+            if (hasOverrideModifier || statType == null)
                 return value;
             
             if (statType.ValueType == StatValueType.Percentage)
@@ -622,18 +568,32 @@ namespace StatForge
         
         public void ForceUpdateModifiers(float deltaTime)
         {
-           bool removedAny = false;
+            bool removedAny = false;
     
             for (int i = modifiers.Count - 1; i >= 0; i--)
             {
                 var modifier = modifiers[i];
-                if (modifier != null && modifier.Update(deltaTime))
+                if (modifier != null && modifier.Duration == ModifierDuration.Temporary)
                 {
-                    if (debug)
-                        Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {Name}");
-                    modifiers.RemoveAt(i);
-                    OnModifierRemoved?.Invoke(this, modifier);
-                    removedAny = true;
+                    if (modifier.Update(deltaTime) || modifier.ShouldRemove())
+                    {
+                        if (debug)
+                            Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {Name}");
+                        modifiers.RemoveAt(i);
+                        OnModifierRemoved?.Invoke(this, modifier);
+                        removedAny = true;
+                    }
+                }
+                else if (modifier != null && modifier.Duration == ModifierDuration.Conditional)
+                {
+                    if (modifier.ShouldRemove())
+                    {
+                        if (debug)
+                            Debug.Log($"[StatForge] Modificador condicional {modifier.Id} removido de {Name}");
+                        modifiers.RemoveAt(i);
+                        OnModifierRemoved?.Invoke(this, modifier);
+                        removedAny = true;
+                    }
                 }
             }
     
@@ -739,6 +699,7 @@ namespace StatForge
             currentlyNotifying.Clear();
             StatModifierManager.ClearAllCaches();
             StatRegistry.ClearFieldCache();
+            StatIdPool.ClearPool();
         }
         
         public float GetBaseValueRaw() => baseValue;

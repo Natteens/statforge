@@ -20,12 +20,6 @@ namespace StatForge
             return stringBuilder.ToString();
         }
         
-        public static void ReturnId(string id)
-        {
-            if (recycledIds.Count < 1024) 
-                recycledIds.Enqueue(id);
-        }
-        
         public static void ClearPool()
         {
             recycledIds.Clear();

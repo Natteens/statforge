@@ -144,19 +144,6 @@ namespace StatForge
             }
         }
         
-        public void RefreshAll()
-        {
-            foreach (var stat in allStats.Where(s => !s.StatType.HasFormula))
-            {
-                stat.ForceRecalculate();
-            }
-            
-            foreach (var stat in allStats.Where(s => s.StatType.HasFormula))
-            {
-                stat.ForceRecalculate();
-            }
-        }
-        
         public static void ClearFieldCache() => fieldCache.Clear();
     }
 }

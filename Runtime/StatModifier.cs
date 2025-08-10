@@ -103,9 +103,13 @@ namespace StatForge
         private static bool initialized;
         internal static bool isShuttingDown;
         
-        static StatModifierManager()
+        // CORREÇÃO: Auto-initialize na primeira chamada
+        public static void EnsureInitialized()
         {
-            Initialize();
+            if (!initialized && !isShuttingDown)
+            {
+                Initialize();
+            }
         }
         
         private static void Initialize()
@@ -116,8 +120,24 @@ namespace StatForge
             
             CreateUpdateManager();
             
+            // CORREÇÃO: Limpeza em mudanças de playmode
+            #if UNITY_EDITOR
+            UnityEditor.EditorApplication.playModeStateChanged += OnPlayModeChanged;
+            #endif
+            
             Application.quitting += OnApplicationQuitting;
         }
+        
+        #if UNITY_EDITOR
+        private static void OnPlayModeChanged(UnityEditor.PlayModeStateChange state)
+        {
+            if (state == UnityEditor.PlayModeStateChange.ExitingPlayMode || 
+                state == UnityEditor.PlayModeStateChange.ExitingEditMode)
+            {
+                ClearAllCaches();
+            }
+        }
+        #endif
         
         private static void OnApplicationQuitting()
         {
@@ -144,6 +164,8 @@ namespace StatForge
         {
             if (stat == null || modifier?.Duration != ModifierDuration.Temporary || isShuttingDown) return;
             
+            EnsureInitialized();
+            
             if (!temporaryModifiers.TryGetValue(stat, out var modifiers))
             {
                 modifiers = new List<IStatModifier>();
@@ -167,11 +189,14 @@ namespace StatForge
             return trackedStats.Contains(stat);
         }
         
+        // CORREÇÃO: Sempre funciona, com ou sem Application.isPlaying
         public static void UpdateAllTrackedStats()
         {
-            if (!Application.isPlaying || isShuttingDown) return;
+            if (isShuttingDown) return;
             
-            var deltaTime = Time.deltaTime;
+            var deltaTime = Application.isPlaying ? Time.deltaTime : Time.fixedDeltaTime;
+            if (deltaTime <= 0) deltaTime = 0.016f; // 60fps fallback
+            
             var validStatsToRemove = new List<Stat>();
             bool foundNullStats = false;
             
@@ -224,7 +249,7 @@ namespace StatForge
         
         public static string GetGlobalDebugInfo()
         {
-            return $"Tracked stats: {trackedStats.Count}";
+            return $"Tracked stats: {trackedStats.Count}, Temporary modifiers: {temporaryModifiers.Count}";
         }
         
         internal static void ClearDataOnly()
@@ -270,6 +295,15 @@ namespace StatForge
         private bool hasBeenDestroyed;
         
         private void Update()
+        {
+            if (!hasBeenDestroyed)
+            {
+                StatModifierManager.UpdateAllTrackedStats();
+            }
+        }
+        
+        // CORREÇÃO: Usa FixedUpdate para timing mais preciso
+        private void FixedUpdate()
         {
             if (!hasBeenDestroyed)
             {

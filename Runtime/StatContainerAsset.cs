@@ -39,22 +39,6 @@ namespace StatForge
             return container;
         }
         
-        public void PopulateContainer(StatContainer container)
-        {
-            container.ClearStats();
-            
-            foreach (var statType in statTypes)
-            {
-                if (statType != null)
-                {
-                    var stat = new Stat(statType, statType.DefaultValue);
-                    container.AddStat(stat);
-                }
-            }
-            
-            container.Initialize();
-        }
-        
         private void OnValidate()
         {
             for (int i = statTypes.Count - 1; i >= 0; i--)

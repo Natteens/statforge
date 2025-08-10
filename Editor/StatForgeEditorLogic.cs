@@ -147,13 +147,29 @@ namespace StatForge.Editor
                 stat.MaxValue = data.NewStatMax;
             }
 
-            stat.AutoAdjustRangeForType();
+            // CORREÇÃO: Chama método próprio em vez do removido
+            AdjustRangeForValueType(stat);
 
             EditorUtility.SetDirty(stat);
             AssetDatabase.SaveAssets();
 
             CancelEdit();
             RefreshAll();
+        }
+
+        // CORREÇÃO: Método próprio para ajustar ranges
+        private void AdjustRangeForValueType(StatType stat)
+        {
+            if (stat.ValueType == StatValueType.Percentage)
+            {
+                if (stat.MinValue < 0f) stat.MinValue = 0f;
+                if (stat.MaxValue > 100f) stat.MaxValue = 100f;
+                
+                if (stat.DefaultValue < stat.MinValue)
+                    stat.DefaultValue = stat.MinValue;
+                else if (stat.DefaultValue > stat.MaxValue)
+                    stat.DefaultValue = stat.MaxValue;
+            }
         }
 
         public void DeleteStat(StatType stat)
