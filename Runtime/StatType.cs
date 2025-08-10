@@ -3,7 +3,6 @@ using System.Globalization;
 
 namespace StatForge
 {
-    [CreateAssetMenu(fileName = "New Stat", menuName = "StatForge/Stat Type")]
     public class StatType : ScriptableObject
     {
         [Header("Basic Information")]

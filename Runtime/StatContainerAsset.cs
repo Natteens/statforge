@@ -3,7 +3,6 @@ using UnityEngine;
 
 namespace StatForge
 {
-    [CreateAssetMenu(fileName = "New Stat Container", menuName = "StatForge/Stat Container")]
     public class StatContainerAsset : ScriptableObject
     {
         [Header("Container Configuration")]
