@@ -161,23 +161,24 @@ namespace StatForge
         private void UpdateModifiersInternal()
         {
             if (modifiers.Count == 0) return;
-            
+    
             var deltaTime = 0.016f;
-            
+    
             bool removedAny = false;
             bool hasAnyTemporary = false;
-            
+    
             for (int i = modifiers.Count - 1; i >= 0; i--)
             {
                 var modifier = modifiers[i];
                 if (modifier == null) continue;
-                
+        
                 if (modifier.Duration == ModifierDuration.Temporary)
                 {
                     hasAnyTemporary = true;
-                    
+            
                     if (modifier.Update(deltaTime) || modifier.ShouldRemove())
                     {
+                      // Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {Name} (acesso normal)");
                         modifiers.RemoveAt(i);
                         OnModifierRemoved?.Invoke(this, modifier);
                         removedAny = true;
@@ -187,15 +188,16 @@ namespace StatForge
                 {
                     if (modifier.ShouldRemove())
                     {
+                       // Debug.Log($"[StatForge] Modificador condicional {modifier.Id} removido de {Name} (acesso normal)");
                         modifiers.RemoveAt(i);
                         OnModifierRemoved?.Invoke(this, modifier);
                         removedAny = true;
                     }
                 }
             }
-            
+    
             StatModifierManager.UpdateTemporaryTracking(this, hasAnyTemporary);
-            
+    
             if (removedAny)
                 InvalidateCache();
         }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace StatForge
@@ -97,8 +98,9 @@ namespace StatForge
     
     public static class StatModifierManager
     {
-        private static readonly List<Stat> allStatsWithTemporaryModifiers = new();
-        private static bool globalUpdateInitialized;
+        private static readonly List<Stat> allStatsWithTemporaryModifiers = new List<Stat>();
+        private static bool globalUpdateInitialized = false;
+        private static float lastUpdateTime = 0f;
         
         static StatModifierManager()
         {
@@ -114,11 +116,20 @@ namespace StatForge
             #if UNITY_EDITOR
             UnityEditor.EditorApplication.update += GlobalUpdateAllStats;
             #endif
+            
+            Debug.Log("[StatForge] Sistema de auto-update global inicializado!");
         }
         
         private static void GlobalUpdateAllStats()
         {
             if (allStatsWithTemporaryModifiers.Count == 0) return;
+            
+            var currentTime = Time.realtimeSinceStartup;
+            var deltaTime = currentTime - lastUpdateTime;
+            lastUpdateTime = currentTime;
+            
+            if (deltaTime <= 0f || deltaTime > 1f) 
+                deltaTime = 0.016f;
             
             for (int i = allStatsWithTemporaryModifiers.Count - 1; i >= 0; i--)
             {
@@ -127,13 +138,60 @@ namespace StatForge
                     var stat = allStatsWithTemporaryModifiers[i];
                     if (stat != null)
                     {
-                        var _ = stat.Value;
+                        ForceUpdateStat(stat, deltaTime);
                     }
                     else
                     {
                         allStatsWithTemporaryModifiers.RemoveAt(i);
                     }
                 }
+            }
+        }
+        
+        private static void ForceUpdateStat(Stat stat, float deltaTime)
+        {
+            try
+            {
+                var modifiers = stat.Modifiers as List<IStatModifier>;
+                if (modifiers == null) return;
+                
+                bool removedAny = false;
+                bool hasAnyTemporary = false;
+                
+                for (int i = modifiers.Count - 1; i >= 0; i--)
+                {
+                    var modifier = modifiers[i];
+                    if (modifier == null) continue;
+                    
+                    if (modifier.Duration == ModifierDuration.Temporary)
+                    {
+                        hasAnyTemporary = true;
+                        
+                        if (modifier.Update(deltaTime) || modifier.ShouldRemove())
+                        {
+                            Debug.Log($"[StatForge] Modificador {modifier.Id} expirou em {stat.Name} (update forçado)");
+                            
+                            stat.RemoveModifier(modifier);
+                            removedAny = true;
+                        }
+                    }
+                    else if (modifier.Duration == ModifierDuration.Conditional)
+                    {
+                        if (modifier.ShouldRemove())
+                        {
+                            Debug.Log($"[StatForge] Modificador condicional {modifier.Id} removido de {stat.Name} (update forçado)");
+                            
+                            stat.RemoveModifier(modifier);
+                            removedAny = true;
+                        }
+                    }
+                }
+                
+                UpdateTemporaryTracking(stat, hasAnyTemporary);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[StatForge] Erro no update forçado de {stat.Name}: {ex}");
             }
         }
         
@@ -146,11 +204,17 @@ namespace StatForge
             if (hasTemporary)
             {
                 if (!allStatsWithTemporaryModifiers.Contains(stat))
+                {
                     allStatsWithTemporaryModifiers.Add(stat);
+                    Debug.Log($"[StatForge] Stat {stat.Name} adicionado ao tracking global");
+                }
             }
             else
             {
-                allStatsWithTemporaryModifiers.Remove(stat);
+                if (allStatsWithTemporaryModifiers.Remove(stat))
+                {
+                    Debug.Log($"[StatForge] Stat {stat.Name} removido do tracking global");
+                }
             }
         }
         
@@ -161,7 +225,8 @@ namespace StatForge
         
         public static string GetGlobalDebugInfo()
         {
-            return $"[StatForge Global] Stats com modificadores temporários: {allStatsWithTemporaryModifiers.Count}";
+            return $"[StatForge Global] Stats com modificadores temporários: {allStatsWithTemporaryModifiers.Count} | " +
+                   $"Nomes: [{string.Join(", ", allStatsWithTemporaryModifiers.Select(s => s.Name))}]";
         }
         
         public static void ClearAllCaches()
